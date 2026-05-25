@@ -1,6 +1,10 @@
 import { useState, useCallback } from "react";
-import { useRunScan, useListWatchlists, useRunScreener } from "@workspace/api-client-react";
-import type { ScanResult, CandidateRecord, RunScreenerParams } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useRunScan, useListWatchlists, useRunScreener,
+  useUpdateWatchlist, useCreateWatchlist,
+} from "@workspace/api-client-react";
+import type { ScanResult, CandidateRecord, RunScreenerParams, Watchlist } from "@workspace/api-client-react";
 import { TickerChart } from "@/components/TickerChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,7 +18,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RefreshCw, Filter, SlidersHorizontal, BarChart2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useToast } from "@/hooks/use-toast";
+import { RefreshCw, Filter, SlidersHorizontal, BarChart2, Bookmark, BookmarkCheck, Plus, Check, Loader2, ListPlus } from "lucide-react";
 import { formatPercent, formatCurrency } from "@/lib/format";
 
 // ── Shared sub-components ──────────────────────────────────────────────────
@@ -274,6 +280,168 @@ function TickerDetail({ c }: { c: CandidateRecord }) {
   );
 }
 
+// ── Watchlist save button ──────────────────────────────────────────────────
+function WatchlistSaveButton({ ticker }: { ticker: string }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const { data: watchlists = [] } = useListWatchlists();
+
+  const inAny = watchlists.some((wl) => wl.tickers.includes(ticker));
+
+  const { mutate: updateWl, isPending: updating } = useUpdateWatchlist({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: ["/api/watchlists"] });
+      },
+    },
+  });
+
+  const { mutate: createWl, isPending: creatingWl } = useCreateWatchlist({
+    mutation: {
+      onSuccess: (created) => {
+        qc.invalidateQueries({ queryKey: ["/api/watchlists"] });
+        setNewName("");
+        setCreating(false);
+        toast({ title: `Added ${ticker} to "${created.name}"` });
+      },
+    },
+  });
+
+  function toggleTicker(wl: Watchlist) {
+    const already = wl.tickers.includes(ticker);
+    const next = already
+      ? wl.tickers.filter((t) => t !== ticker)
+      : [...wl.tickers, ticker];
+    updateWl(
+      { id: wl.id, data: { name: wl.name, tickers: next } },
+      {
+        onSuccess: () =>
+          toast({
+            title: already
+              ? `Removed ${ticker} from "${wl.name}"`
+              : `Added ${ticker} to "${wl.name}"`,
+          }),
+      },
+    );
+  }
+
+  function handleCreate() {
+    const name = newName.trim();
+    if (!name) return;
+    createWl({ data: { name, tickers: [ticker] } });
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`h-7 w-7 rounded-md transition-colors ${
+            inAny
+              ? "text-[hsl(var(--go-color))] hover:text-[hsl(var(--go-color))]/80"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {inAny
+            ? <BookmarkCheck className="h-3.5 w-3.5" />
+            : <Bookmark className="h-3.5 w-3.5" />}
+        </Button>
+      </PopoverTrigger>
+
+      <PopoverContent
+        className="w-64 p-0"
+        align="end"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
+          <ListPlus className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Save <span className="text-foreground">{ticker}</span> to watchlist
+          </span>
+        </div>
+
+        {/* Existing watchlists */}
+        <div className="max-h-52 overflow-y-auto">
+          {watchlists.length === 0 ? (
+            <div className="px-3 py-4 text-xs text-muted-foreground text-center">
+              No watchlists yet — create one below.
+            </div>
+          ) : (
+            watchlists.map((wl) => {
+              const has = wl.tickers.includes(ticker);
+              return (
+                <button
+                  key={wl.id}
+                  disabled={updating}
+                  onClick={() => toggleTicker(wl)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted/40 transition-colors disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${has ? "bg-[hsl(var(--go-color))]" : "bg-muted-foreground/40"}`} />
+                    <span className="truncate font-medium">{wl.name}</span>
+                    <span className="text-xs text-muted-foreground flex-shrink-0">
+                      {wl.tickers.length}
+                    </span>
+                  </div>
+                  {updating ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  ) : has ? (
+                    <Check className="h-3.5 w-3.5 text-[hsl(var(--go-color))]" />
+                  ) : (
+                    <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+                  )}
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        {/* Create new watchlist */}
+        <div className="border-t border-border p-2">
+          {creating ? (
+            <div className="flex gap-1.5">
+              <Input
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreate();
+                  if (e.key === "Escape") { setCreating(false); setNewName(""); }
+                }}
+                placeholder="Watchlist name..."
+                className="h-7 text-xs font-mono"
+              />
+              <Button
+                size="sm"
+                disabled={!newName.trim() || creatingWl}
+                onClick={handleCreate}
+                className="h-7 px-2 text-xs"
+              >
+                {creatingWl ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
+              </Button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setCreating(true)}
+              className="w-full flex items-center gap-2 px-1 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors rounded"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New watchlist...
+            </button>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // ── Results table (shared) ─────────────────────────────────────────────────
 function ResultsTable({
   rows,
@@ -286,6 +454,7 @@ function ResultsTable({
     <Table>
       <TableHeader>
         <TableRow className="border-border">
+          <TableHead className="w-8"></TableHead>
           <TableHead>Ticker</TableHead>
           <TableHead>Verdict</TableHead>
           <TableHead>Score</TableHead>
@@ -308,6 +477,9 @@ function ResultsTable({
               className="border-border cursor-pointer hover:bg-muted/30 transition-colors"
               onClick={() => onSelect(c)}
             >
+              <TableCell className="pr-0" onClick={(e) => e.stopPropagation()}>
+                <WatchlistSaveButton ticker={c.ticker} />
+              </TableCell>
               <TableCell className="font-bold font-mono">{c.ticker}</TableCell>
               <TableCell><VerdictBadge verdict={c.verdict} /></TableCell>
               <TableCell><ScoreBar score={c.score} /></TableCell>
