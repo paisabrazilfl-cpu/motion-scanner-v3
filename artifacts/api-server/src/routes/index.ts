@@ -1,8 +1,22 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import scanRouter from "./scan";
+import watchlistsRouter from "./watchlists";
+import configRouter from "./config";
+import brokerRouter from "./broker";
+import sectorRouter from "./sector";
+import auditRouter from "./audit";
+import apikeysRouter from "./apikeys";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(scanRouter);
+router.use(watchlistsRouter);
+router.use(configRouter);
+router.use(brokerRouter);
+router.use(sectorRouter);
+router.use(auditRouter);
+router.use(apikeysRouter);
 
 export default router;

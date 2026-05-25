@@ -3,20 +3,33 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Motion Scanner v3.0 API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: scan
+    description: Scanner engine
+  - name: watchlists
+    description: Ticker watchlists
+  - name: config
+    description: Tenant scan configuration
+  - name: broker
+    description: Alpaca broker integration
+  - name: sector
+    description: Sector rotation
+  - name: audit
+    description: Audit logs
+  - name: apikeys
+    description: Tenant API key management
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +37,738 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── SCAN ─────────────────────────────────────────────────────────────────
+  /scan:
+    post:
+      operationId: runScan
+      tags: [scan]
+      summary: Run a scan on a list of tickers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScanRequest"
+      responses:
+        "200":
+          description: Scan results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScanResult"
+
+  /scan/history:
+    get:
+      operationId: listScanHistory
+      tags: [scan]
+      summary: List past scan runs
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Scan history list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScanHistoryList"
+
+  /scan/history/{id}:
+    get:
+      operationId: getScanHistory
+      tags: [scan]
+      summary: Get a specific scan result
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Scan result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScanHistoryItem"
+        "404":
+          description: Not found
+
+  # ── WATCHLISTS ────────────────────────────────────────────────────────────
+  /watchlists:
+    get:
+      operationId: listWatchlists
+      tags: [watchlists]
+      summary: List all watchlists for tenant
+      responses:
+        "200":
+          description: Watchlist array
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Watchlist"
+    post:
+      operationId: createWatchlist
+      tags: [watchlists]
+      summary: Create a watchlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WatchlistInput"
+      responses:
+        "201":
+          description: Created watchlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Watchlist"
+
+  /watchlists/{id}:
+    get:
+      operationId: getWatchlist
+      tags: [watchlists]
+      summary: Get a watchlist
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Watchlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Watchlist"
+        "404":
+          description: Not found
+    put:
+      operationId: updateWatchlist
+      tags: [watchlists]
+      summary: Update a watchlist
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WatchlistInput"
+      responses:
+        "200":
+          description: Updated watchlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Watchlist"
+    delete:
+      operationId: deleteWatchlist
+      tags: [watchlists]
+      summary: Delete a watchlist
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── CONFIG ────────────────────────────────────────────────────────────────
+  /config:
+    get:
+      operationId: getConfig
+      tags: [config]
+      summary: Get tenant scan configuration
+      responses:
+        "200":
+          description: Scan configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScanConfig"
+    put:
+      operationId: updateConfig
+      tags: [config]
+      summary: Update tenant scan configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScanConfigInput"
+      responses:
+        "200":
+          description: Updated configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScanConfig"
+
+  # ── BROKER ────────────────────────────────────────────────────────────────
+  /broker/account:
+    get:
+      operationId: getBrokerAccount
+      tags: [broker]
+      summary: Get Alpaca account status
+      responses:
+        "200":
+          description: Account details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrokerAccount"
+        "503":
+          description: Broker not configured
+
+  /broker/execute:
+    post:
+      operationId: executeTrades
+      tags: [broker]
+      summary: Execute bracket orders for GO candidates
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecuteRequest"
+      responses:
+        "200":
+          description: Execution results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExecutionResult"
+
+  /broker/positions:
+    get:
+      operationId: getBrokerPositions
+      tags: [broker]
+      summary: Get open Alpaca positions
+      responses:
+        "200":
+          description: Open positions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Position"
+
+  # ── SECTOR ────────────────────────────────────────────────────────────────
+  /sector-rotation:
+    get:
+      operationId: getSectorRotation
+      tags: [sector]
+      summary: Get sector rotation heatmap data
+      responses:
+        "200":
+          description: Sector rotation data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SectorRotation"
+
+  # ── AUDIT LOGS ────────────────────────────────────────────────────────────
+  /audit-logs:
+    get:
+      operationId: listAuditLogs
+      tags: [audit]
+      summary: List SOC 2 audit events for tenant
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Audit log list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogList"
+
+  # ── API KEYS ──────────────────────────────────────────────────────────────
+  /api-keys:
+    get:
+      operationId: getApiKeys
+      tags: [apikeys]
+      summary: Get masked API keys for tenant
+      responses:
+        "200":
+          description: Masked key info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyStatus"
+    put:
+      operationId: updateApiKeys
+      tags: [apikeys]
+      summary: Store or update encrypted API keys
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiKeyInput"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyStatus"
+
+  # ── DASHBOARD SUMMARIES (wow endpoints) ───────────────────────────────────
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [scan]
+      summary: Dashboard summary — recent scan stats + regime
+      responses:
+        "200":
+          description: Summary stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    # ── SCAN ─────────────────────────────────────────────────────────────
+    ScanRequest:
+      type: object
+      required: [tickers]
+      properties:
+        tickers:
+          type: array
+          items:
+            type: string
+        watchlistId:
+          type: ["integer", "null"]
+        configOverride:
+          type: ["object", "null"]
+          additionalProperties: true
+        computeOptions:
+          type: boolean
+          default: true
+        computeSectors:
+          type: boolean
+          default: true
+
+    CandidateRecord:
+      type: object
+      required: [ticker, verdict, score]
+      properties:
+        ticker:
+          type: string
+        verdict:
+          type: string
+          enum: [GO, HOLD, ABORT]
+        score:
+          type: number
+        reason:
+          type: string
+        technical:
+          type: ["object", "null"]
+          additionalProperties: true
+        fundamentals:
+          type: ["object", "null"]
+          additionalProperties: true
+        flow:
+          type: ["object", "null"]
+          additionalProperties: true
+        monteCarlo:
+          type: ["object", "null"]
+          additionalProperties: true
+        indicators:
+          type: ["object", "null"]
+          additionalProperties: true
+        optionsFlow:
+          type: ["object", "null"]
+          additionalProperties: true
+        sectorContext:
+          type: ["object", "null"]
+          additionalProperties: true
+
+    ScanResult:
+      type: object
+      required: [id, timestamp, candidates, hold, rejected]
+      properties:
+        id:
+          type: integer
+        timestamp:
+          type: string
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/CandidateRecord"
+        hold:
+          type: array
+          items:
+            $ref: "#/components/schemas/CandidateRecord"
+        rejected:
+          type: array
+          items:
+            $ref: "#/components/schemas/CandidateRecord"
+        sectorRotation:
+          type: ["object", "null"]
+          additionalProperties: true
+        activeProviders:
+          type: array
+          items:
+            type: string
+
+    ScanHistoryItem:
+      type: object
+      required: [id, createdAt, tickerCount, goCount, holdCount, rejectCount]
+      properties:
+        id:
+          type: integer
+        createdAt:
+          type: string
+        tickerCount:
+          type: integer
+        goCount:
+          type: integer
+        holdCount:
+          type: integer
+        rejectCount:
+          type: integer
+        regime:
+          type: ["string", "null"]
+        payload:
+          type: ["object", "null"]
+          additionalProperties: true
+
+    ScanHistoryList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScanHistoryItem"
+        total:
+          type: integer
+
+    # ── WATCHLIST ─────────────────────────────────────────────────────────
+    Watchlist:
+      type: object
+      required: [id, name, tickers, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        tickers:
+          type: array
+          items:
+            type: string
+        description:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    WatchlistInput:
+      type: object
+      required: [name, tickers]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        tickers:
+          type: array
+          items:
+            type: string
+        description:
+          type: ["string", "null"]
+
+    # ── CONFIG ────────────────────────────────────────────────────────────
+    ScanConfig:
+      type: object
+      required: [id, config]
+      properties:
+        id:
+          type: integer
+        config:
+          type: object
+          additionalProperties: true
+        updatedAt:
+          type: string
+
+    ScanConfigInput:
+      type: object
+      required: [config]
+      properties:
+        config:
+          type: object
+          additionalProperties: true
+
+    # ── BROKER ────────────────────────────────────────────────────────────
+    BrokerAccount:
+      type: object
+      required: [equity, buyingPower, cash, portfolioValue, paper]
+      properties:
+        equity:
+          type: number
+        lastEquity:
+          type: number
+        buyingPower:
+          type: number
+        cash:
+          type: number
+        portfolioValue:
+          type: number
+        paper:
+          type: boolean
+        dayPl:
+          type: ["number", "null"]
+        dayPlPct:
+          type: ["number", "null"]
+
+    ExecuteRequest:
+      type: object
+      required: [candidates]
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/CandidateRecord"
+        dryRun:
+          type: boolean
+          default: true
+        configOverride:
+          type: ["object", "null"]
+          additionalProperties: true
+
+    ExecutionResult:
+      type: object
+      required: [ok, ticker]
+      properties:
+        ok:
+          type: boolean
+        ticker:
+          type: string
+        orderId:
+          type: ["string", "null"]
+        qty:
+          type: integer
+        entry:
+          type: number
+        target:
+          type: number
+        stop:
+          type: number
+        reason:
+          type: string
+
+    Position:
+      type: object
+      required: [symbol, qty, marketValue, unrealizedPl]
+      properties:
+        symbol:
+          type: string
+        qty:
+          type: number
+        marketValue:
+          type: number
+        unrealizedPl:
+          type: number
+        unrealizedPlPct:
+          type: number
+        currentPrice:
+          type: number
+        entryPrice:
+          type: number
+
+    # ── SECTOR ────────────────────────────────────────────────────────────
+    SectorEntry:
+      type: object
+      required: [etf, name, ret1d, ret5d, ret20d, rs1d, rs5d, rs20d, leader, laggard]
+      properties:
+        etf:
+          type: string
+        name:
+          type: string
+        ret1d:
+          type: number
+        ret5d:
+          type: number
+        ret20d:
+          type: number
+        rs1d:
+          type: number
+        rs5d:
+          type: number
+        rs20d:
+          type: number
+        leader:
+          type: boolean
+        laggard:
+          type: boolean
+
+    SectorRotation:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+        regime:
+          type: ["string", "null"]
+        cyclicalRs:
+          type: ["number", "null"]
+        defensiveRs:
+          type: ["number", "null"]
+        sectors:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectorEntry"
+        leaders:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectorEntry"
+        laggards:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectorEntry"
+        spyReturns:
+          type: ["object", "null"]
+          additionalProperties: true
+
+    # ── AUDIT LOGS ────────────────────────────────────────────────────────
+    AuditLogEntry:
+      type: object
+      required: [id, action, createdAt]
+      properties:
+        id:
+          type: integer
+        action:
+          type: string
+        resourceType:
+          type: ["string", "null"]
+        resourceId:
+          type: ["string", "null"]
+        userId:
+          type: ["string", "null"]
+        ipAddress:
+          type: ["string", "null"]
+        metadata:
+          type: ["object", "null"]
+          additionalProperties: true
+        createdAt:
+          type: string
+
+    AuditLogList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLogEntry"
+        total:
+          type: integer
+
+    # ── API KEYS ──────────────────────────────────────────────────────────
+    ApiKeyStatus:
+      type: object
+      properties:
+        alpacaConfigured:
+          type: boolean
+        tradierConfigured:
+          type: boolean
+        polygonConfigured:
+          type: boolean
+        finnhubConfigured:
+          type: boolean
+        discordConfigured:
+          type: boolean
+        alpacaPaper:
+          type: boolean
+
+    ApiKeyInput:
+      type: object
+      properties:
+        alpacaApiKey:
+          type: ["string", "null"]
+        alpacaSecretKey:
+          type: ["string", "null"]
+        alpacaPaper:
+          type: ["boolean", "null"]
+        tradierApiKey:
+          type: ["string", "null"]
+        polygonApiKey:
+          type: ["string", "null"]
+        finnhubApiKey:
+          type: ["string", "null"]
+        discordWebhookUrl:
+          type: ["string", "null"]
+
+    # ── DASHBOARD ─────────────────────────────────────────────────────────
+    DashboardSummary:
+      type: object
+      required: [totalScans, avgGoCount, avgScore, lastRegime, lastScanAt]
+      properties:
+        totalScans:
+          type: integer
+        avgGoCount:
+          type: number
+        avgScore:
+          type: number
+        lastRegime:
+          type: ["string", "null"]
+        lastScanAt:
+          type: ["string", "null"]
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScanHistoryItem"
+        topTickers:
+          type: array
+          items:
+            type: object
+            required: [ticker, goCount, avgScore]
+            properties:
+              ticker:
+                type: string
+              goCount:
+                type: integer
+              avgScore:
+                type: number

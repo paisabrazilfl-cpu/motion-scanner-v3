@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Motion Scanner v3.0"
+version = "1.0.0"
+id = "artifacts/motion-scanner"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23523
+
+[services.development]
+run = "pnpm --filter @workspace/motion-scanner run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/motion-scanner", "run", "build" ]
+publicDir = "artifacts/motion-scanner/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23523"
+BASE_PATH = "/"

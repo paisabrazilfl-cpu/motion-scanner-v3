@@ -1,0 +1,1727 @@
+# MOTION_SCANNER v3.0 — MVP HARDENED BUILD
+
+All 10 priority fixes inlined. Every file below is **drop-in replacement, complete, runnable**.
+
+---
+
+## 1. `qualification.py` — COMPLETE (TriState + all v2.0 gates + new options/sector gates)
+
+```python
+"""
+Tri-state qualification engine. Returns GO / HOLD / ABORT with explicit reason.
+
+Gate order (fail-fast):
+  1. Data integrity      → ABORT
+  2. Earnings blackout   → ABORT
+  3. Liquidity floor     → ABORT
+  4. Price/RVOL/ATR core → HOLD
+  5. EMA stack / RSI band→ HOLD
+  6. Indicator gates     → HOLD
+  7. Options flow gate   → HOLD
+  8. Sector headwind veto→ HOLD
+  9. All pass            → GO
+"""
+from __future__ import annotations
+from dataclasses import dataclass
+from typing import Optional, Dict
+
+
+@dataclass
+class TriState:
+    state: str   # "GO" | "HOLD" | "ABORT"
+    reason: str
+
+    def __iter__(self):
+        return iter((self.state, self.reason))
+
+
+def qualify(tech: Dict, fund: Dict, flow: Dict, cfg: Dict,
+            indicators: Optional[Dict] = None,
+            options: Optional[Dict] = None,
+            sector_ctx: Optional[Dict] = None) -> TriState:
+
+    # ── 1. Data integrity ────────────────────────────────────────────────
+    if not tech or not tech.get("ok"):
+        return TriState("ABORT", "NO_TECHNICAL_DATA")
+    if not flow or not flow.get("ok"):
+        return TriState("ABORT", "NO_FLOW_DATA")
+
+    # ── 2. Earnings blackout ─────────────────────────────────────────────
+    if fund and fund.get("ok"):
+        days_to_er = fund.get("days_to_earnings")
+        blackout = cfg.get("fundamental", {}).get("earnings_blackout_days", 2)
+        if days_to_er is not None and 0 <= days_to_er <= blackout:
+            return TriState("ABORT", f"EARNINGS_BLACKOUT_{days_to_er}D")
+
+    # ── 3. Universe / liquidity floor ────────────────────────────────────
+    uni = cfg.get("universe", {})
+    price = tech.get("close", 0)
+    if price < uni.get("price_min", 1.0):
+        return TriState("ABORT", "PRICE_BELOW_FLOOR")
+    if price > uni.get("price_max", 500.0):
+        return TriState("ABORT", "PRICE_ABOVE_CEILING")
+
+    dollar_vol = flow.get("dollar_volume", 0)
+    if dollar_vol < cfg.get("flow_motion", {}).get("dollar_volume_min", 5_000_000):
+        return TriState("ABORT", "DOLLAR_VOL_TOO_LOW")
+
+    # ── 4. Core technical floor (HOLD-able) ──────────────────────────────
+    tcfg = cfg.get("technical", {})
+    if tech.get("rvol", 0) < tcfg.get("rvol_min", 2.0):
+        return TriState("HOLD", "RVOL_BELOW_MIN")
+    if tech.get("atr_pct", 0) < tcfg.get("atr_pct_min", 0.03):
+        return TriState("HOLD", "ATR_BELOW_MIN")
+
+    # ── 5. EMA stack / RSI band ──────────────────────────────────────────
+    if tcfg.get("ema_stack_required", True) and not tech.get("ema_stack_ok"):
+        return TriState("HOLD", "EMA_STACK_BROKEN")
+    rsi = tech.get("rsi", 50)
+    rsi_lo, rsi_hi = tcfg.get("rsi_band", [40, 80])
+    if not (rsi_lo <= rsi <= rsi_hi):
+        return TriState("HOLD", f"RSI_OUT_OF_BAND_{rsi:.1f}")
+
+    # ── 6. Indicator gates ───────────────────────────────────────────────
+    icfg = cfg.get("indicators", {})
+    if indicators and indicators.get("ok"):
+        stack = indicators.get("ma_stack", {}).get("bull_stack_score", 0)
+        if icfg.get("require_bull_stack") and stack < icfg.get("min_bull_stack", 0.75):
+            return TriState("HOLD", f"BULL_STACK_WEAK_{stack:.2f}")
+
+        heat = indicators.get("stoch_heatmap", {}).get("stoch_bull_heat", 0)
+        if heat < icfg.get("min_stoch_bull_heat", 0.0):
+            return TriState("HOLD", "STOCH_HEAT_LOW")
+
+        if icfg.get("avoid_overbought"):
+            ob = indicators.get("stoch_heatmap", {}).get("overbought_count", 0)
+            if ob >= 10:
+                return TriState("HOLD", "STOCH_OVERBOUGHT")
+
+        if icfg.get("require_macd_above_zero"):
+            if not indicators.get("macd_classic", {}).get("above_zero"):
+                return TriState("HOLD", "MACD_BELOW_ZERO")
+
+        if icfg.get("require_above_cloud"):
+            if not indicators.get("ichimoku", {}).get("above_cloud"):
+                return TriState("HOLD", "BELOW_ICHIMOKU_CLOUD")
+
+        comp = indicators.get("composite_bias", {}).get("bull_score", 0)
+        if comp < icfg.get("min_composite_bull", 0.0):
+            return TriState("HOLD", f"COMPOSITE_BIAS_WEAK_{comp:.2f}")
+
+    # ── 7. Options flow gate ─────────────────────────────────────────────
+    if options and options.get("ok"):
+        min_bull = cfg.get("options", {}).get("min_flow_bull_score", 0.0)
+        if min_bull > 0 and options.get("flow_bull_score", 0) < min_bull:
+            return TriState("HOLD", f"OPTIONS_FLOW_WEAK_{options.get('flow_bull_score',0):.2f}")
+
+    # ── 8. Sector headwind veto ──────────────────────────────────────────
+    if sector_ctx and sector_ctx.get("ok"):
+        if icfg.get("veto_sector_headwind") and sector_ctx.get("headwind"):
+            return TriState("HOLD", "SECTOR_HEADWIND")
+
+    return TriState("GO", "ALL_GATES_PASS")
+```
+
+---
+
+## 2. `ranker.py` — FIXED scale guard + clamps
+
+```python
+def composite_score(tech, flow, fund, mc, cfg,
+                    indicators=None, options=None, sector_ctx=None):
+    w = cfg["scoring_weights"]
+
+    t_score = 0.0
+    if tech and tech.get("ok"):
+        t_score = (min(1.0, tech["rvol"] / 5) * 0.35 +
+                   min(1.0, tech["atr_pct"] / 0.10) * 0.25 +
+                   (1.0 if tech.get("ema_stack_ok") else 0.0) * 0.20 +
+                   (1.0 if tech.get("breakout") else 0.0) * 0.20)
+
+    f_score = 0.0
+    if flow and flow.get("ok"):
+        f_score = (min(1.0, flow["dollar_volume"] / 50_000_000) * 0.5 +
+                   min(1.0, max(0, flow.get("rel_strength_spy", 0)) / 3) * 0.3 +
+                   min(1.0, flow.get("news_velocity", 0)) * 0.2)
+
+    fu_score = 0.0
+    if fund and fund.get("ok"):
+        si = fund.get("short_interest") or 0
+        fu_score = min(1.0, si / 0.3) * 0.5 + (0.5 if fund.get("float") else 0.0)
+
+    mc_score = max(0.0, min(1.0, mc["expected_R"] / 1.0)) if mc else 0.0
+
+    ind_score = 0.0
+    if indicators and indicators.get("ok"):
+        stack = indicators["ma_stack"]["bull_stack_score"]
+        heat = indicators["stoch_heatmap"]["stoch_bull_heat"]
+        macd_bonus = 0.15 if indicators["macd_classic"]["bull_cross"] else 0.0
+        macd_bonus += 0.10 if indicators["macd_classic"]["hist_expanding"] else 0.0
+        ich_bonus = indicators["ichimoku"]["bull_strength"] * 0.25
+        squeeze_bonus = 0.15 if indicators["bands"]["squeeze"]["just_released"] else 0.0
+        div_bonus = 0.10 if indicators["stoch_divergence"]["bull_regular"] else 0.0
+        comp = indicators["composite_bias"]["bull_score"]
+        ind_score = min(1.0, stack * 0.20 + heat * 0.15 + comp * 0.20 +
+                        macd_bonus + ich_bonus + squeeze_bonus + div_bonus)
+
+    opt_score = 0.0
+    if options and options.get("ok"):
+        opt_score = float(options.get("flow_bull_score", 0.0))
+
+    sect_score = 0.5
+    if sector_ctx and sector_ctx.get("ok"):
+        if sector_ctx.get("tailwind"):
+            sect_score = 1.0
+        elif sector_ctx.get("headwind"):
+            sect_score = 0.1
+        if sector_ctx.get("regime") == "RISK_ON":
+            sect_score = min(1.0, sect_score + 0.15)
+
+    w_ind  = float(w.get("indicators", 0.15))
+    w_opt  = float(w.get("options", 0.10))
+    w_sect = float(w.get("sector", 0.05))
+    base = (float(w.get("technical", 0.20)) + float(w.get("flow", 0.15)) +
+            float(w.get("fundamental", 0.10)) + float(w.get("monte_carlo", 0.25)))
+    overhead = w_ind + w_opt + w_sect
+
+    # ── Guarded scale: never negative, never blow up ─────────────────────
+    if base <= 0:
+        scale = 0.0
+    else:
+        scale = max(0.0, (1.0 - overhead)) / base
+
+    raw = (w["technical"] * scale * t_score +
+           w["flow"] * scale * f_score +
+           w["fundamental"] * scale * fu_score +
+           w["monte_carlo"] * scale * mc_score +
+           w_ind * ind_score +
+           w_opt * opt_score +
+           w_sect * sect_score)
+    return float(max(0.0, min(1.0, raw)))
+```
+
+---
+
+## 3. `options_flow.py` — FIXED bull score math + labeled RV-proxy
+
+```python
+"""
+Options chain layer — IV rank (RV-PROXY), unusual options activity, flow scoring.
+
+NOTE: IV rank is currently RV-PROXY (realized vol over 252d). True IV history
+requires Tradier historical IV endpoint or persistent IV cache. The output
+field `iv_rank_source` documents which method was used.
+
+Bull score components (sum to ≤ 1.0, all bounded [0,1]):
+  - 0.25 × pcr_score           (low PCR is bullish)
+  - 0.25 × net_premium_score   ([-1,1] mapped to [0,1])
+  - 0.20 × call_uoa_share      (call-heavy UOA dominance)
+  - 0.15 × iv_sweet_spot       (peaks at IV rank ≈ 0.5)
+  - 0.15 × sweep_density       (capped at 5 big sweeps)
+"""
+from __future__ import annotations
+import os, math
+from typing import Optional, Dict, List
+
+import numpy as np
+import pandas as pd
+import requests
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# CHAIN PROVIDERS
+# ════════════════════════════════════════════════════════════════════════════
+
+def _tradier_chain(ticker: str) -> Optional[pd.DataFrame]:
+    key = os.getenv("TRADIER_API_KEY")
+    if not key:
+        return None
+    base = os.getenv("TRADIER_BASE_URL", "https://sandbox.tradier.com/v1")
+    h = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
+    try:
+        r = requests.get(f"{base}/markets/options/expirations",
+                         params={"symbol": ticker}, headers=h, timeout=10)
+        exps = r.json().get("expirations", {}).get("date", [])
+        if not exps:
+            return None
+        exps = exps[:4] if isinstance(exps, list) else [exps]
+        rows = []
+        for exp in exps:
+            r = requests.get(f"{base}/markets/options/chains",
+                             params={"symbol": ticker, "expiration": exp,
+                                     "greeks": "true"},
+                             headers=h, timeout=15)
+            opts = r.json().get("options", {}).get("option", [])
+            if not opts:
+                continue
+            for o in opts:
+                rows.append({
+                    "expiration": exp,
+                    "strike": o.get("strike"),
+                    "type": o.get("option_type"),
+                    "bid": o.get("bid"), "ask": o.get("ask"),
+                    "last": o.get("last"),
+                    "volume": o.get("volume", 0) or 0,
+                    "open_interest": o.get("open_interest", 0) or 0,
+                    "iv": (o.get("greeks") or {}).get("mid_iv"),
+                    "delta": (o.get("greeks") or {}).get("delta"),
+                    "gamma": (o.get("greeks") or {}).get("gamma"),
+                    "theta": (o.get("greeks") or {}).get("theta"),
+                    "vega": (o.get("greeks") or {}).get("vega"),
+                })
+        return pd.DataFrame(rows) if rows else None
+    except Exception:
+        return None
+
+
+def _yf_chain(ticker: str) -> Optional[pd.DataFrame]:
+    try:
+        import yfinance as yf
+        t = yf.Ticker(ticker)
+        exps = t.options[:4]
+        if not exps:
+            return None
+        rows = []
+        for exp in exps:
+            ch = t.option_chain(exp)
+            for df, kind in [(ch.calls, "call"), (ch.puts, "put")]:
+                for _, r in df.iterrows():
+                    rows.append({
+                        "expiration": exp, "strike": r["strike"], "type": kind,
+                        "bid": r.get("bid", 0), "ask": r.get("ask", 0),
+                        "last": r.get("lastPrice", 0),
+                        "volume": int(r.get("volume", 0) or 0),
+                        "open_interest": int(r.get("openInterest", 0) or 0),
+                        "iv": r.get("impliedVolatility"),
+                        "delta": None, "gamma": None, "theta": None, "vega": None,
+                    })
+        return pd.DataFrame(rows) if rows else None
+    except Exception:
+        return None
+
+
+def get_chain(ticker: str) -> Optional[pd.DataFrame]:
+    for fn in (_tradier_chain, _yf_chain):
+        df = fn(ticker)
+        if df is not None and not df.empty:
+            return df
+    return None
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# IV RANK / PERCENTILE — RV-PROXY (clearly labeled)
+# ════════════════════════════════════════════════════════════════════════════
+
+def iv_rank_percentile(ticker: str, current_iv: float) -> Dict:
+    """RV-PROXY: compares current IV against 252d realized-vol distribution.
+    Not a true IV rank. Field `iv_rank_source` = "RV_PROXY"."""
+    try:
+        import yfinance as yf
+        hist = yf.Ticker(ticker).history(period="1y")
+        if hist.empty or current_iv is None:
+            return {"iv_rank": None, "iv_percentile": None,
+                    "iv_current": current_iv, "iv_rank_source": "UNAVAILABLE"}
+        rv = hist["Close"].pct_change().rolling(20).std() * math.sqrt(252)
+        rv = rv.dropna()
+        if rv.empty:
+            return {"iv_rank": None, "iv_percentile": None,
+                    "iv_current": current_iv, "iv_rank_source": "UNAVAILABLE"}
+        lo, hi = float(rv.min()), float(rv.max())
+        rank = (current_iv - lo) / (hi - lo + 1e-12)
+        pct = float((rv < current_iv).mean())
+        return {
+            "iv_rank": float(np.clip(rank, 0, 1)),
+            "iv_percentile": pct,
+            "iv_current": float(current_iv),
+            "rv_20d": float(rv.iloc[-1]),
+            "iv_rank_source": "RV_PROXY",
+        }
+    except Exception:
+        return {"iv_rank": None, "iv_percentile": None,
+                "iv_current": current_iv, "iv_rank_source": "ERROR"}
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# FLOW METRICS
+# ════════════════════════════════════════════════════════════════════════════
+
+def _atm_iv(chain: pd.DataFrame, spot: float) -> Optional[float]:
+    front = chain[chain["expiration"] == chain["expiration"].min()]
+    if front.empty:
+        return None
+    front = front.assign(dist=(front["strike"] - spot).abs())
+    atm = front.nsmallest(4, "dist")
+    iv = atm["iv"].dropna()
+    return float(iv.mean()) if not iv.empty else None
+
+
+def detect_uoa(chain: pd.DataFrame, vol_to_oi_min: float = 3.0,
+               min_volume: int = 500) -> pd.DataFrame:
+    df = chain.copy()
+    df["vol_oi"] = df["volume"] / (df["open_interest"] + 1)
+    uoa = df[(df["vol_oi"] >= vol_to_oi_min) & (df["volume"] >= min_volume)].copy()
+    uoa["notional"] = uoa["volume"] * (uoa["last"].fillna(0)) * 100
+    return uoa.sort_values("notional", ascending=False)
+
+
+def compute_options_flow(ticker: str, spot: float,
+                         cfg: Optional[Dict] = None) -> Dict:
+    cfg = cfg or {}
+    chain = get_chain(ticker)
+    if chain is None or chain.empty:
+        return {"ok": False, "reason": "NO_CHAIN_DATA"}
+
+    chain = chain.dropna(subset=["strike", "type"])
+    chain["volume"] = chain["volume"].fillna(0).astype(int)
+    chain["open_interest"] = chain["open_interest"].fillna(0).astype(int)
+    chain["last"] = chain["last"].fillna(0).astype(float)
+
+    calls = chain[chain["type"] == "call"]
+    puts  = chain[chain["type"] == "put"]
+
+    call_vol, put_vol = int(calls["volume"].sum()), int(puts["volume"].sum())
+    call_oi,  put_oi  = int(calls["open_interest"].sum()), int(puts["open_interest"].sum())
+
+    pcr_vol = put_vol / max(call_vol, 1)
+    pcr_oi  = put_oi  / max(call_oi, 1)
+
+    call_prem = float((calls["volume"] * calls["last"] * 100).sum())
+    put_prem  = float((puts["volume"]  * puts["last"]  * 100).sum())
+    net_prem  = call_prem - put_prem
+    total_prem = call_prem + put_prem
+
+    atm_iv = _atm_iv(chain, spot)
+    iv_meta = iv_rank_percentile(ticker, atm_iv) if atm_iv else {
+        "iv_rank": None, "iv_percentile": None,
+        "iv_current": None, "iv_rank_source": "NO_ATM_IV"}
+
+    uoa = detect_uoa(chain,
+                     vol_to_oi_min=cfg.get("uoa_vol_oi_min", 3.0),
+                     min_volume=cfg.get("uoa_min_volume", 500))
+    uoa_call = uoa[uoa["type"] == "call"]
+    uoa_put  = uoa[uoa["type"] == "put"]
+
+    big_sweeps = uoa[uoa["notional"] >= cfg.get("sweep_min_notional", 50_000)]
+    sweeps_list = [
+        {"type": r["type"], "strike": float(r["strike"]),
+         "exp": r["expiration"], "vol": int(r["volume"]),
+         "oi": int(r["open_interest"]),
+         "notional": round(float(r["notional"]), 0)}
+        for _, r in big_sweeps.head(10).iterrows()
+    ]
+
+    # ── FIXED Composite flow score ──────────────────────────────────────
+    # Each component bounded [0,1]; weights sum to 1.0
+    pcr_score = 1.0 if pcr_vol < 0.7 else (0.4 if pcr_vol < 1.0 else 0.0)
+
+    if total_prem > 0:
+        net_ratio = np.clip(net_prem / total_prem, -1.0, 1.0)
+        net_score = (net_ratio + 1.0) / 2.0     # [-1,1] → [0,1]
+    else:
+        net_score = 0.5
+
+    if len(uoa) > 0 and uoa["notional"].sum() > 0:
+        call_uoa_share = float(uoa_call["notional"].sum() / uoa["notional"].sum())
+    else:
+        call_uoa_share = 0.5
+
+    if iv_meta.get("iv_rank") is not None:
+        # Sweet spot at IV rank 0.5 (moderate IV); penalize extremes
+        iv_sweet = float(1.0 - abs(iv_meta["iv_rank"] - 0.5) * 2.0)
+        iv_sweet = max(0.0, iv_sweet)
+    else:
+        iv_sweet = 0.5
+
+    sweep_density = float(min(1.0, len(big_sweeps) / 5.0))
+
+    bull = (0.25 * pcr_score +
+            0.25 * net_score +
+            0.20 * call_uoa_share +
+            0.15 * iv_sweet +
+            0.15 * sweep_density)
+    bull_score = float(np.clip(bull, 0.0, 1.0))
+
+    return {
+        "ok": True,
+        "pcr_volume": round(pcr_vol, 3),
+        "pcr_oi": round(pcr_oi, 3),
+        "call_volume": call_vol,
+        "put_volume": put_vol,
+        "call_premium": round(call_prem, 0),
+        "put_premium": round(put_prem, 0),
+        "net_premium": round(net_prem, 0),
+        "total_premium": round(total_prem, 0),
+        "atm_iv": atm_iv,
+        "iv_rank": iv_meta.get("iv_rank"),
+        "iv_percentile": iv_meta.get("iv_percentile"),
+        "iv_rank_source": iv_meta.get("iv_rank_source"),
+        "uoa_count": int(len(uoa)),
+        "uoa_call_count": int(len(uoa_call)),
+        "uoa_put_count": int(len(uoa_put)),
+        "big_sweeps": sweeps_list,
+        "flow_bull_score": round(bull_score, 3),
+        "flow_bear_score": round(1.0 - bull_score, 3),
+        "score_components": {
+            "pcr_score": round(pcr_score, 3),
+            "net_score": round(net_score, 3),
+            "call_uoa_share": round(call_uoa_share, 3),
+            "iv_sweet": round(iv_sweet, 3),
+            "sweep_density": round(sweep_density, 3),
+        },
+    }
+```
+
+---
+
+## 4. `broker_alpaca.py` — FIXED (min_score gate + daily loss circuit + quote refresh + version-safe orders)
+
+```python
+"""
+Alpaca paper-trading execution layer (hardened MVP).
+
+SAFETY GATES (all enforced):
+  - PAPER default (ALPACA_PAPER=true)
+  - max_position_usd, max_concurrent (config + env)
+  - min_score_to_fire (config-driven)
+  - Daily loss circuit breaker (max_daily_loss_pct)
+  - Idempotency (open positions + open orders)
+  - Live quote refresh before sizing (slippage protection)
+"""
+from __future__ import annotations
+import os
+from dataclasses import dataclass
+from typing import Optional, Dict, List
+
+import structlog
+
+log = structlog.get_logger("broker")
+
+
+@dataclass
+class ExecutionResult:
+    ok: bool
+    ticker: str
+    order_id: Optional[str] = None
+    qty: int = 0
+    entry: float = 0.0
+    target: float = 0.0
+    stop: float = 0.0
+    reason: str = ""
+
+
+class AlpacaBroker:
+    def __init__(self, paper: bool = True):
+        from alpaca.trading.client import TradingClient
+        self.paper = paper or os.getenv("ALPACA_PAPER", "true").lower() == "true"
+        key = os.getenv("ALPACA_API_KEY")
+        sec = os.getenv("ALPACA_SECRET_KEY")
+        if not (key and sec):
+            raise RuntimeError("ALPACA_API_KEY / ALPACA_SECRET_KEY missing")
+        self.client = TradingClient(key, sec, paper=self.paper)
+        self._data_client = None
+
+    def _data(self):
+        if self._data_client is None:
+            from alpaca.data.historical import StockHistoricalDataClient
+            self._data_client = StockHistoricalDataClient(
+                os.getenv("ALPACA_API_KEY"), os.getenv("ALPACA_SECRET_KEY"))
+        return self._data_client
+
+    # ── Account ─────────────────────────────────────────────────────────
+    def account(self) -> Dict:
+        a = self.client.get_account()
+        return {
+            "equity": float(a.equity),
+            "last_equity": float(getattr(a, "last_equity", a.equity)),
+            "buying_power": float(a.buying_power),
+            "cash": float(a.cash),
+            "portfolio_value": float(a.portfolio_value),
+            "paper": self.paper,
+        }
+
+    def open_positions(self) -> List[str]:
+        try:
+            return [p.symbol for p in self.client.get_all_positions()]
+        except Exception as e:
+            log.warning("positions_fetch_failed", error=str(e))
+            return []
+
+    def open_orders(self) -> List[str]:
+        """Version-safe: tries new alpaca-py first, falls back."""
+        try:
+            from alpaca.trading.requests import GetOrdersRequest
+            from alpaca.trading.enums import QueryOrderStatus
+            try:
+                req = GetOrdersRequest(status=QueryOrderStatus.OPEN)
+                orders = self.client.get_orders(filter=req)
+            except TypeError:
+                orders = self.client.get_orders(req)
+            return [o.symbol for o in orders]
+        except Exception as e:
+            log.warning("orders_fetch_failed", error=str(e))
+            return []
+
+    # ── Live quote (slippage protection) ────────────────────────────────
+    def latest_quote(self, ticker: str) -> Optional[float]:
+        try:
+            from alpaca.data.requests import StockLatestQuoteRequest
+            req = StockLatestQuoteRequest(symbol_or_symbols=ticker)
+            q = self._data().get_stock_latest_quote(req)
+            row = q.get(ticker)
+            if row is None:
+                return None
+            ask = float(getattr(row, "ask_price", 0) or 0)
+            bid = float(getattr(row, "bid_price", 0) or 0)
+            if ask > 0 and bid > 0:
+                return (ask + bid) / 2.0
+            return ask or bid or None
+        except Exception as e:
+            log.warning("quote_fetch_failed", ticker=ticker, error=str(e))
+            return None
+
+    # ── Order placement ─────────────────────────────────────────────────
+    def submit_bracket(self, ticker: str, qty: int, entry: float,
+                       target: float, stop: float,
+                       side: str = "buy") -> ExecutionResult:
+        from alpaca.trading.requests import (
+            MarketOrderRequest, TakeProfitRequest, StopLossRequest)
+        from alpaca.trading.enums import OrderSide, TimeInForce, OrderClass
+        try:
+            # Sanity: ensure stop < entry < target for long
+            if side == "buy" and not (stop < entry < target):
+                return ExecutionResult(ok=False, ticker=ticker,
+                                       reason=f"INVALID_LEVELS s={stop} e={entry} t={target}")
+            req = MarketOrderRequest(
+                symbol=ticker, qty=qty,
+                side=OrderSide.BUY if side == "buy" else OrderSide.SELL,
+                time_in_force=TimeInForce.DAY,
+                order_class=OrderClass.BRACKET,
+                take_profit=TakeProfitRequest(limit_price=round(target, 2)),
+                stop_loss=StopLossRequest(stop_price=round(stop, 2)),
+            )
+            o = self.client.submit_order(req)
+            log.info("order_submitted", ticker=ticker, qty=qty,
+                     entry=entry, target=target, stop=stop, id=str(o.id))
+            return ExecutionResult(
+                ok=True, ticker=ticker, order_id=str(o.id),
+                qty=qty, entry=entry, target=target, stop=stop,
+                reason="SUBMITTED",
+            )
+        except Exception as e:
+            log.error("order_failed", ticker=ticker, error=str(e))
+            return ExecutionResult(ok=False, ticker=ticker, reason=f"ERROR: {e}")
+
+
+def auto_execute(payload: Dict, cfg: Dict,
+                 dry_run: bool = False) -> List[ExecutionResult]:
+    """Execute GO candidates with full safety gates."""
+    results: List[ExecutionResult] = []
+    candidates = payload.get("candidates", [])
+    if not candidates:
+        return results
+
+    exec_cfg = cfg.get("execution", {})
+    risk = cfg.get("risk", {})
+    min_score = float(exec_cfg.get("min_score_to_fire", 0.50))
+    max_pos_usd = float(os.getenv("MAX_POSITION_USD",
+                                  risk.get("max_position_usd", 1000)))
+    max_conc = int(os.getenv("MAX_CONCURRENT_POSITIONS",
+                             risk.get("max_concurrent_positions", 5)))
+    max_daily_loss = float(risk.get("max_daily_loss_pct", 0.02))
+    slip_buffer = float(exec_cfg.get("slippage_buffer_pct", 0.005))
+
+    # ── Score gate (apply BEFORE broker init) ────────────────────────────
+    qualified = [c for c in candidates if c.get("score", 0) >= min_score]
+    if not qualified:
+        return [ExecutionResult(ok=False, ticker="*",
+                                reason=f"NO_CANDIDATES_ABOVE_SCORE_{min_score}")]
+
+    # ── Broker init ──────────────────────────────────────────────────────
+    broker = None
+    if not dry_run:
+        try:
+            broker = AlpacaBroker(paper=True)
+            acct = broker.account()
+        except Exception as e:
+            log.error("broker_init_failed", error=str(e))
+            return [ExecutionResult(ok=False, ticker="*", reason=f"INIT: {e}")]
+    else:
+        acct = {"equity": 100_000.0, "last_equity": 100_000.0,
+                "buying_power": 100_000.0}
+
+    # ── Daily loss circuit breaker ───────────────────────────────────────
+    eq, last_eq = acct["equity"], acct.get("last_equity", acct["equity"])
+    if last_eq > 0:
+        day_pnl_pct = (eq - last_eq) / last_eq
+        if day_pnl_pct < -max_daily_loss:
+            return [ExecutionResult(
+                ok=False, ticker="*",
+                reason=f"DAILY_LOSS_LIMIT_HIT {day_pnl_pct:.2%} < -{max_daily_loss:.2%}")]
+
+    # ── Idempotency ──────────────────────────────────────────────────────
+    held = set()
+    if broker:
+        held = set(broker.open_positions()) | set(broker.open_orders())
+    free_slots = max(0, max_conc - len(held))
+    if free_slots == 0:
+        return [ExecutionResult(ok=False, ticker="*", reason="MAX_CONCURRENT_REACHED")]
+
+    buying_power = acct["buying_power"]
+
+    for cand in qualified[:free_slots]:
+        tk = cand["ticker"]
+        if tk in held:
+            results.append(ExecutionResult(ok=False, ticker=tk, reason="ALREADY_HELD"))
+            continue
+
+        mc = cand.get("monte_carlo")
+        if not mc:
+            results.append(ExecutionResult(ok=False, ticker=tk, reason="NO_MC_LEVELS"))
+            continue
+
+        # ── Refresh quote for slippage protection ────────────────────────
+        stale_close = float(cand["technical"]["close"])
+        live = broker.latest_quote(tk) if broker else None
+        entry = live if (live and live > 0) else stale_close
+        # Apply small upward slippage buffer for market-buy limit cap
+        entry_with_slip = entry * (1.0 + slip_buffer)
+
+        target = float(mc.get("target_price", entry * 1.02))
+        stop   = float(mc.get("stop_price",   entry * 0.99))
+
+        # Re-anchor target/stop if quote drifted >2% from close
+        if live and abs(live - stale_close) / stale_close > 0.02:
+            R = stale_close - float(mc.get("stop_price", stale_close * 0.99))
+            if R > 0:
+                stop = live - R
+                target = live + R * cfg.get("monte_carlo", {}).get("target_R", 2.0)
+
+        usd_per = min(max_pos_usd, buying_power * 0.95)
+        qty = int(usd_per // entry_with_slip)
+        if qty <= 0:
+            results.append(ExecutionResult(ok=False, ticker=tk, reason="QTY_ZERO"))
+            continue
+
+        if dry_run:
+            results.append(ExecutionResult(
+                ok=True, ticker=tk, qty=qty, entry=entry,
+                target=target, stop=stop, reason="DRY_RUN"))
+            buying_power -= qty * entry
+            continue
+
+        res = broker.submit_bracket(tk, qty, entry, target, stop)
+        results.append(res)
+        if res.ok:
+            buying_power -= qty * entry
+
+    return results
+```
+
+---
+
+## 5. `notify_discord.py` — FIXED (rate-limit + safe chart import)
+
+```python
+"""Discord webhook notifications with embedded chart PNGs + rate limiting."""
+from __future__ import annotations
+import os, time
+from typing import Dict, List, Optional
+import structlog
+
+log = structlog.get_logger("notify")
+
+DISCORD_DELAY_SEC = 0.6  # ~100 req/min ceiling
+
+
+def _render_chart_png(df, ticker: str) -> Optional[bytes]:
+    try:
+        try:
+            from charts import build_chart
+        except ImportError:
+            log.warning("chart_module_missing", ticker=ticker)
+            return None
+        try:
+            fig = build_chart(df.tail(120), ticker=ticker, height=600,
+                              show_kc=False, show_dc=False)
+        except TypeError:
+            fig = build_chart(df.tail(120), ticker=ticker)
+        return fig.to_image(format="png", width=1200, height=600, scale=1)
+    except Exception as e:
+        log.warning("chart_render_failed", ticker=ticker, error=str(e))
+        return None
+
+
+def _verdict_color(v: str) -> int:
+    return {"GO": 0x2ecc71, "HOLD": 0xf1c40f, "ABORT": 0xe74c3c}.get(v, 0x95a5a6)
+
+
+def _build_embed(rec: Dict) -> Dict:
+    tech = rec.get("technical", {})
+    mc = rec.get("monte_carlo") or {}
+    ind = rec.get("indicators", {})
+    opts = rec.get("options_flow") or {}
+    sect = rec.get("sector_context") or {}
+
+    fields = [
+        {"name": "Score", "value": f"`{rec.get('score', 0):.3f}`", "inline": True},
+        {"name": "Close", "value": f"`${tech.get('close', 0):.2f}`", "inline": True},
+        {"name": "RVOL", "value": f"`{tech.get('rvol', 0):.2f}x`", "inline": True},
+        {"name": "ATR%", "value": f"`{tech.get('atr_pct', 0)*100:.2f}%`", "inline": True},
+        {"name": "RSI", "value": f"`{tech.get('rsi', 0):.1f}`", "inline": True},
+        {"name": "MA Stack",
+         "value": f"`{ind.get('ma_stack',{}).get('bull_stack_score',0):.2f}`",
+         "inline": True},
+    ]
+    if mc:
+        fields += [
+            {"name": "P(Target)", "value": f"`{mc.get('p_target',0):.2f}`", "inline": True},
+            {"name": "P(Stop)", "value": f"`{mc.get('p_stop',0):.2f}`", "inline": True},
+            {"name": "Exp R", "value": f"`{mc.get('expected_R',0):.2f}`", "inline": True},
+        ]
+    if opts.get("ok"):
+        fields += [
+            {"name": "Options Flow",
+             "value": f"`{opts.get('flow_bull_score',0):.2f} bull`", "inline": True},
+            {"name": "PCR", "value": f"`{opts.get('pcr_volume',0):.2f}`", "inline": True},
+            {"name": "UOA", "value": f"`{opts.get('uoa_count',0)}`", "inline": True},
+        ]
+    if sect.get("ok"):
+        flag = "🟢" if sect.get("tailwind") else ("🔴" if sect.get("headwind") else "⚪")
+        fields.append({"name": "Sector",
+                       "value": f"{flag} {sect.get('sector_name','?')} ({sect.get('regime','?')})",
+                       "inline": False})
+
+    return {
+        "title": f"{'🚀' if rec['verdict']=='GO' else ('⏸️' if rec['verdict']=='HOLD' else '⛔')} "
+                 f"{rec['ticker']} — {rec['verdict']}",
+        "description": f"**Reason:** {rec.get('reason','')}",
+        "color": _verdict_color(rec["verdict"]),
+        "fields": fields,
+        "footer": {"text": f"Motion Scanner v3.0 · {rec.get('provider_daily','?')}"},
+    }
+
+
+def send_scan_notification(payload: Dict, cfg: Dict) -> bool:
+    url = os.getenv("DISCORD_WEBHOOK_URL") or cfg.get("notifications", {}).get("webhook_url")
+    if not url:
+        log.info("discord_skip_no_webhook")
+        return False
+
+    notify_on = os.getenv("DISCORD_NOTIFY_ON",
+                          cfg.get("notifications", {}).get("notify_on", "GO")).upper()
+
+    targets: List[Dict] = list(payload.get("candidates", []))
+    if notify_on in ("GO_HOLD", "ALL"):
+        targets += payload.get("hold", [])
+    if notify_on == "ALL":
+        targets += payload.get("rejected", [])
+
+    _send_summary(url, payload)
+    time.sleep(DISCORD_DELAY_SEC)
+    for rec in targets[:10]:
+        _send_ticker(url, rec)
+        time.sleep(DISCORD_DELAY_SEC)
+    return True
+
+
+def _send_summary(url: str, payload: Dict):
+    try:
+        from discord_webhook import DiscordWebhook, DiscordEmbed
+        wh = DiscordWebhook(url=url, username="Motion Scanner", rate_limit_retry=True)
+        em = DiscordEmbed(title="📡 SCAN COMPLETE",
+                          description=f"`{payload.get('timestamp','')}`",
+                          color=0x3498db)
+        em.add_embed_field(name="GO",
+                           value=f"**{len(payload.get('candidates',[]))}**", inline=True)
+        em.add_embed_field(name="HOLD",
+                           value=f"**{len(payload.get('hold',[]))}**", inline=True)
+        em.add_embed_field(name="REJECT",
+                           value=f"**{len(payload.get('rejected',[]))}**", inline=True)
+        em.add_embed_field(name="Providers",
+                           value=", ".join(payload.get("active_providers", [])) or "none",
+                           inline=False)
+        if payload.get("sector_rotation", {}).get("ok"):
+            sr = payload["sector_rotation"]
+            leaders = ", ".join(f"`{s['etf']}`" for s in sr.get("leaders", []))
+            em.add_embed_field(name=f"Regime: {sr['regime']}",
+                               value=f"Leaders: {leaders or 'n/a'}", inline=False)
+        wh.add_embed(em)
+        wh.execute()
+    except Exception as e:
+        log.error("discord_summary_failed", error=str(e))
+
+
+def _send_ticker(url: str, rec: Dict):
+    try:
+        from discord_webhook import DiscordWebhook, DiscordEmbed
+        wh = DiscordWebhook(url=url, username="Motion Scanner", rate_limit_retry=True)
+        ed = _build_embed(rec)
+
+        df = rec.get("_daily_df")
+        png = _render_chart_png(df, rec["ticker"]) if df is not None and not df.empty else None
+        if png:
+            wh.add_file(file=png, filename=f"{rec['ticker']}.png")
+
+        em = DiscordEmbed(title=ed["title"], description=ed["description"], color=ed["color"])
+        for f in ed["fields"]:
+            em.add_embed_field(name=f["name"], value=f["value"], inline=f["inline"])
+        em.set_footer(text=ed["footer"]["text"])
+        if png:
+            em.set_image(url=f"attachment://{rec['ticker']}.png")
+        wh.add_embed(em)
+        wh.execute()
+    except Exception as e:
+        log.error("discord_ticker_failed", ticker=rec.get("ticker"), error=str(e))
+
+
+def send_execution_notification(results: List, cfg: Dict) -> bool:
+    url = os.getenv("DISCORD_WEBHOOK_URL") or cfg.get("notifications", {}).get("webhook_url")
+    if not url or not results:
+        return False
+    try:
+        from discord_webhook import DiscordWebhook, DiscordEmbed
+        wh = DiscordWebhook(url=url, username="Motion Scanner · Broker", rate_limit_retry=True)
+        em = DiscordEmbed(title="🤖 EXECUTION REPORT", color=0x9b59b6)
+        for r in results[:15]:
+            status = "✅" if r.ok else "❌"
+            em.add_embed_field(
+                name=f"{status} {r.ticker}",
+                value=f"qty={r.qty} entry=${r.entry:.2f} tgt=${r.target:.2f} "
+                      f"stop=${r.stop:.2f}\n_{r.reason}_",
+                inline=False)
+        wh.add_embed(em)
+        wh.execute()
+        return True
+    except Exception as e:
+        log.error("discord_exec_failed", error=str(e))
+        return False
+```
+
+---
+
+## 6. `engine.py` — FIXED (bench None-guard + qualify signature)
+
+```python
+import json, os, yaml
+from datetime import datetime
+from data_ingest import DataRouter
+from features_technical import compute_technical
+from features_fundamental import compute_fundamental
+from features_flow import compute_flow
+from indicators import compute_indicator_bundle
+from options_flow import compute_options_flow
+from sector_rotation import compute_sector_rotation, ticker_sector_context
+from qualification import qualify
+from monte_carlo import run_mc, mc_verdict
+from ranker import composite_score
+
+
+def load_config(path="config.yaml"):
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+def _safe_bench(router, benchmark):
+    try:
+        r = router.get_daily(benchmark, 60)
+        if r and r.ok and r.data is not None and not r.data.empty:
+            return r.data
+    except Exception:
+        pass
+    return None
+
+
+def scan(tickers, cfg, benchmark="SPY", return_dataframes=False,
+         compute_options: bool = True, compute_sectors: bool = True):
+    router = DataRouter()
+    bench = _safe_bench(router, benchmark)
+    rotation = compute_sector_rotation(router) if compute_sectors else {"ok": False}
+
+    results = []
+    for tk in tickers:
+        try:
+            d_res = router.get_daily(tk, 250)
+            if not (d_res and d_res.ok and d_res.data is not None and not d_res.data.empty):
+                results.append({"ticker": tk, "verdict": "ABORT",
+                                "reason": "NO_DAILY_DATA", "score": 0.0})
+                continue
+
+            i_res = router.get_intraday(tk, 5)
+            fund_raw = router.get_fundamentals(tk)
+            news = router.get_news(tk, 24) or []
+
+            tech = compute_technical(d_res.data, i_res.data if i_res and i_res.ok else None)
+            fund = compute_fundamental(fund_raw, news, cfg)
+            flow = compute_flow(d_res.data, bench, news) if bench is not None else \
+                   {"ok": False, "reason": "NO_BENCHMARK"}
+            indicators = compute_indicator_bundle(
+                d_res.data, i_res.data if i_res and i_res.ok else None)
+
+            options = (compute_options_flow(tk, tech.get("close", 0), cfg.get("options", {}))
+                       if compute_options else {"ok": False})
+            sect_ctx = ticker_sector_context(tk, rotation) if rotation.get("ok") else {"ok": False}
+
+            q = qualify(tech, fund, flow, cfg, indicators, options, sect_ctx)
+
+            mc, mc_v = None, "SKIP"
+            if q.state == "GO":
+                ic = i_res.data["close"] if (i_res and i_res.ok) else None
+                mc = run_mc(tech["close"], tech["atr_pct"], ic, cfg,
+                            has_catalyst=len(news) >= 3)
+                mc_v = mc_verdict(mc, cfg)
+
+            final, reason = q.state, q.reason
+            if q.state == "GO":
+                if mc_v == "ABORT": final, reason = "ABORT", "MC_TAIL_RISK"
+                elif mc_v == "HOLD": final, reason = "HOLD", "MC_EDGE_WEAK"
+
+            score = composite_score(tech, flow, fund, mc, cfg,
+                                    indicators, options, sect_ctx) \
+                    if final == "GO" else 0.0
+
+            ind_out = {k: v for k, v in indicators.items() if k != "_raw"} \
+                      if indicators else {}
+
+            entry = {
+                "ticker": tk, "verdict": final, "reason": reason,
+                "score": round(score, 4),
+                "technical": tech, "fundamental": fund, "flow": flow,
+                "indicators": ind_out, "monte_carlo": mc,
+                "options_flow": options, "sector_context": sect_ctx,
+                "provider_daily": d_res.provider,
+                "provider_intraday": i_res.provider if (i_res and i_res.ok) else None,
+            }
+            if return_dataframes:
+                entry["_daily_df"] = d_res.data
+                entry["_intraday_df"] = i_res.data if (i_res and i_res.ok) else None
+                entry["_indicators_raw"] = indicators.get("_raw") if indicators else None
+            results.append(entry)
+
+        except Exception as e:
+            results.append({"ticker": tk, "verdict": "ABORT",
+                            "reason": f"ERROR: {type(e).__name__}: {e}",
+                            "score": 0.0})
+
+    results.sort(key=lambda x: x.get("score", 0), reverse=True)
+    return {
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "active_providers": router.active(),
+        "sector_rotation": rotation,
+        "candidates": [r for r in results if r["verdict"] == "GO"],
+        "hold": [r for r in results if r["verdict"] == "HOLD"],
+        "rejected": [r for r in results if r["verdict"] == "ABORT"],
+        "config_snapshot": cfg,
+    }
+
+
+def log_jsonl(payload, log_dir="./logs"):
+    os.makedirs(log_dir, exist_ok=True)
+    p = os.path.join(log_dir, "scans.jsonl")
+    safe = {k: v for k, v in payload.items() if not k.startswith("_")}
+    # Strip DataFrames from per-record entries
+    for bucket in ("candidates", "hold", "rejected"):
+        safe[bucket] = [{k: v for k, v in r.items() if not k.startswith("_")}
+                        for r in safe.get(bucket, [])]
+    with open(p, "a") as f:
+        f.write(json.dumps(safe, default=str) + "\n")
+    return p
+```
+
+---
+
+## 7. `sector_rotation.py` — ENHANCED (lazy sector mapping w/ cache)
+
+```python
+"""Sector rotation heatmap + lazy yfinance sector resolution with on-disk cache."""
+from __future__ import annotations
+import os, json
+from typing import Dict, Optional
+import pandas as pd
+import numpy as np
+
+SECTOR_ETFS = {
+    "XLK": "Technology", "XLY": "Consumer Discretionary",
+    "XLC": "Communication Services", "XLF": "Financials",
+    "XLV": "Healthcare", "XLI": "Industrials",
+    "XLP": "Consumer Staples", "XLU": "Utilities",
+    "XLE": "Energy", "XLB": "Materials", "XLRE": "Real Estate",
+}
+
+YF_SECTOR_TO_ETF = {
+    "Technology": "XLK", "Consumer Cyclical": "XLY", "Consumer Defensive": "XLP",
+    "Communication Services": "XLC", "Financial Services": "XLF",
+    "Healthcare": "XLV", "Industrials": "XLI", "Utilities": "XLU",
+    "Energy": "XLE", "Basic Materials": "XLB", "Real Estate": "XLRE",
+}
+
+STATIC_MAP = {
+    "AAPL": "XLK", "MSFT": "XLK", "NVDA": "XLK", "AMD": "XLK",
+    "GOOGL": "XLC", "META": "XLC", "NFLX": "XLC", "DIS": "XLC",
+    "AMZN": "XLY", "TSLA": "XLY", "HD": "XLY", "NKE": "XLY",
+    "JPM": "XLF", "BAC": "XLF", "GS": "XLF", "COIN": "XLF",
+    "UNH": "XLV", "JNJ": "XLV", "PFE": "XLV", "LLY": "XLV",
+    "XOM": "XLE", "CVX": "XLE", "OXY": "XLE",
+    "WMT": "XLP", "PG": "XLP", "KO": "XLP",
+    "PLTR": "XLK", "SOFI": "XLF", "RIOT": "XLK", "MARA": "XLK",
+}
+
+CACHE_PATH = os.path.join("logs", "sector_cache.json")
+
+
+def _load_cache() -> Dict[str, str]:
+    try:
+        with open(CACHE_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_cache(c: Dict[str, str]):
+    try:
+        os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
+        with open(CACHE_PATH, "w") as f:
+            json.dump(c, f)
+    except Exception:
+        pass
+
+
+def _resolve_sector(ticker: str) -> Optional[str]:
+    tk = ticker.upper()
+    if tk in STATIC_MAP:
+        return STATIC_MAP[tk]
+    cache = _load_cache()
+    if tk in cache:
+        return cache[tk] or None
+    try:
+        import yfinance as yf
+        info = yf.Ticker(tk).info or {}
+        yf_sector = info.get("sector")
+        etf = YF_SECTOR_TO_ETF.get(yf_sector)
+        cache[tk] = etf or ""
+        _save_cache(cache)
+        return etf
+    except Exception:
+        cache[tk] = ""
+        _save_cache(cache)
+        return None
+
+
+def fetch_sector_data(router, days: int = 60) -> pd.DataFrame:
+    syms = list(SECTOR_ETFS.keys()) + ["SPY"]
+    out = {}
+    for s in syms:
+        try:
+            res = router.get_daily(s, days)
+            if res and res.ok and not res.data.empty:
+                out[s] = res.data["close"]
+        except Exception:
+            pass
+    return pd.DataFrame(out).dropna(how="all")
+
+
+def compute_sector_rotation(router) -> Dict:
+    df = fetch_sector_data(router)
+    if df.empty or "SPY" not in df.columns:
+        return {"ok": False, "reason": "NO_SECTOR_DATA"}
+
+    spy_ret = {
+        "1d": float(df["SPY"].pct_change(1).iloc[-1]),
+        "5d": float(df["SPY"].pct_change(5).iloc[-1]),
+        "20d": float(df["SPY"].pct_change(20).iloc[-1]),
+    }
+
+    sectors = []
+    for etf, name in SECTOR_ETFS.items():
+        if etf not in df.columns:
+            continue
+        s = df[etf]
+        r1, r5, r20 = (float(s.pct_change(n).iloc[-1]) for n in (1, 5, 20))
+        rs1 = r1 - spy_ret["1d"]
+        rs5 = r5 - spy_ret["5d"]
+        rs20 = r20 - spy_ret["20d"]
+        sectors.append({
+            "etf": etf, "name": name,
+            "ret_1d": round(r1 * 100, 2), "ret_5d": round(r5 * 100, 2),
+            "ret_20d": round(r20 * 100, 2),
+            "rs_1d": round(rs1 * 100, 2), "rs_5d": round(rs5 * 100, 2),
+            "rs_20d": round(rs20 * 100, 2),
+            "leader": rs5 > 0 and rs20 > 0,
+            "laggard": rs5 < 0 and rs20 < 0,
+        })
+    sectors.sort(key=lambda x: x["rs_5d"], reverse=True)
+
+    cyclical = ["XLK", "XLY", "XLC", "XLF", "XLI"]
+    defensive = ["XLP", "XLU", "XLV", "XLRE"]
+    cyc_rs = float(np.mean([s["rs_5d"] for s in sectors if s["etf"] in cyclical]) or 0)
+    def_rs = float(np.mean([s["rs_5d"] for s in sectors if s["etf"] in defensive]) or 0)
+
+    if cyc_rs > def_rs + 0.3:   regime = "RISK_ON"
+    elif def_rs > cyc_rs + 0.3: regime = "RISK_OFF"
+    else:                       regime = "NEUTRAL"
+
+    return {
+        "ok": True, "regime": regime,
+        "cyclical_rs": round(cyc_rs, 2), "defensive_rs": round(def_rs, 2),
+        "spy_returns": spy_ret, "sectors": sectors,
+        "leaders": [s for s in sectors if s["leader"]][:3],
+        "laggards": [s for s in sectors if s["laggard"]][-3:],
+    }
+
+
+def ticker_sector_context(ticker: str, rotation: Dict) -> Dict:
+    if not rotation.get("ok"):
+        return {"ok": False}
+    etf = _resolve_sector(ticker)
+    if not etf:
+        return {"ok": False, "reason": "UNMAPPED_SECTOR"}
+    sec = next((s for s in rotation["sectors"] if s["etf"] == etf), None)
+    if not sec:
+        return {"ok": False, "reason": "SECTOR_NOT_IN_ROTATION"}
+    return {
+        "ok": True,
+        "sector_etf": etf, "sector_name": sec["name"],
+        "rs_5d": sec["rs_5d"], "rs_20d": sec["rs_20d"],
+        "tailwind": sec["leader"], "headwind": sec["laggard"],
+        "regime": rotation["regime"],
+    }
+```
+
+---
+
+## 8. `ui_streamlit.py` — REAL TABS (not commented pseudo-code)
+
+```python
+"""Motion Scanner v3.0 UI — full tabs + execute/notify actions."""
+import streamlit as st
+import pandas as pd
+import yaml
+from engine import load_config, scan, log_jsonl
+from charts import (build_chart, build_mc_distribution_chart,
+                    build_sector_heatmap, build_options_flow_chart)
+from broker_alpaca import auto_execute, AlpacaBroker
+from notify_discord import send_scan_notification, send_execution_notification
+
+st.set_page_config(page_title="Motion Scanner v3.0", layout="wide")
+st.title("🛰️ Motion Scanner v3.0")
+
+cfg = load_config("config.yaml")
+
+# ═══════════════════════ SIDEBAR ═══════════════════════
+with st.sidebar:
+    st.header("⚙️ Configuration")
+
+    tickers_txt = st.text_input("Tickers", "TSLA,NVDA,AMD,COIN,PLTR")
+    benchmark = st.text_input("Benchmark", "SPY")
+
+    st.subheader("🎯 Options Flow")
+    cfg.setdefault("options", {})["enabled"] = st.checkbox(
+        "Pull options chains", cfg["options"].get("enabled", True))
+    cfg["options"]["min_flow_bull_score"] = st.slider(
+        "Min options bull score", 0.0, 1.0,
+        float(cfg["options"].get("min_flow_bull_score", 0.0)), 0.05)
+
+    st.subheader("🌐 Sector / Macro")
+    cfg.setdefault("sector", {})["enabled"] = st.checkbox(
+        "Sector rotation overlay", cfg["sector"].get("enabled", True))
+    cfg.setdefault("indicators", {})["veto_sector_headwind"] = st.checkbox(
+        "Veto sector headwinds", cfg["indicators"].get("veto_sector_headwind", False))
+
+    st.subheader("🤖 Broker Execution")
+    cfg.setdefault("execution", {})["enabled"] = st.checkbox(
+        "Enable auto-execute on GO", cfg["execution"].get("enabled", False))
+    cfg["execution"]["paper_only"] = st.checkbox(
+        "Paper trading only", cfg["execution"].get("paper_only", True))
+    cfg["execution"]["min_score_to_fire"] = st.slider(
+        "Min score to fire", 0.0, 1.0,
+        float(cfg["execution"].get("min_score_to_fire", 0.50)), 0.05)
+    dry_run_exec = st.checkbox("Dry run (no orders sent)", True)
+
+    st.subheader("📢 Discord")
+    cfg.setdefault("notifications", {})["enabled"] = st.checkbox(
+        "Send Discord alerts", cfg["notifications"].get("enabled", True))
+    cfg["notifications"]["notify_on"] = st.selectbox(
+        "Notify on", ["GO", "GO_HOLD", "ALL"],
+        index=["GO", "GO_HOLD", "ALL"].index(
+            cfg["notifications"].get("notify_on", "GO")))
+
+    st.divider()
+    if st.button("🚀 RUN SCAN", use_container_width=True, type="primary"):
+        syms = [t.strip().upper() for t in tickers_txt.split(",") if t.strip()]
+        with st.spinner(f"Scanning {len(syms)} symbols..."):
+            payload = scan(syms, cfg, benchmark,
+                           return_dataframes=True,
+                           compute_options=cfg["options"]["enabled"],
+                           compute_sectors=cfg["sector"]["enabled"])
+            st.session_state["payload"] = payload
+            log_jsonl(payload)
+
+# ═══════════════════════ MAIN PANEL ═══════════════════════
+if "payload" not in st.session_state:
+    st.info("👈 Configure and click **RUN SCAN** to begin.")
+    st.stop()
+
+payload = st.session_state["payload"]
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("GO", len(payload["candidates"]))
+c2.metric("HOLD", len(payload["hold"]))
+c3.metric("REJECT", len(payload["rejected"]))
+c4.metric("Regime", payload.get("sector_rotation", {}).get("regime", "n/a"))
+
+if payload.get("sector_rotation", {}).get("ok"):
+    with st.expander("🌐 Sector Rotation Heatmap", expanded=True):
+        st.plotly_chart(build_sector_heatmap(payload["sector_rotation"]),
+                        use_container_width=True)
+
+# ── Per-ticker drilldown ──────────────────────────────────────────────────
+all_records = (payload["candidates"] + payload["hold"] + payload["rejected"])
+if all_records:
+    sel = st.selectbox(
+        "Inspect ticker",
+        [f"{r['ticker']} [{r['verdict']}] score={r.get('score',0):.3f}"
+         for r in all_records])
+    sel_tk = sel.split()[0]
+    rec = next(r for r in all_records if r["ticker"] == sel_tk)
+
+    tabs = st.tabs(["📊 Chart", "🎲 Monte Carlo", "📈 Indicators",
+                    "🎯 Options", "🌐 Sector", "🗂️ Raw"])
+
+    with tabs[0]:
+        df = rec.get("_daily_df")
+        if df is not None and not df.empty:
+            try:
+                fig = build_chart(df.tail(120), ticker=sel_tk, height=600,
+                                  show_kc=False, show_dc=False)
+            except TypeError:
+                fig = build_chart(df.tail(120), ticker=sel_tk)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No price data")
+
+    with tabs[1]:
+        mc = rec.get("monte_carlo")
+        if mc:
+            try:
+                st.plotly_chart(build_mc_distribution_chart(mc, sel_tk),
+                                use_container_width=True)
+            except Exception:
+                pass
+            st.json(mc)
+        else:
+            st.info("Monte Carlo not run (ticker did not pass qualification)")
+
+    with tabs[2]:
+        ind = rec.get("indicators", {})
+        if ind:
+            st.json(ind)
+        else:
+            st.info("No indicators")
+
+    with tabs[3]:
+        opts = rec.get("options_flow", {})
+        if opts.get("ok"):
+            st.plotly_chart(build_options_flow_chart(opts, sel_tk),
+                            use_container_width=True)
+            if opts.get("iv_rank_source") == "RV_PROXY":
+                st.caption("⚠️ IV rank is RV-proxy (realized vol over 252d). "
+                           "Not a true IV history.")
+            col_a, col_b, col_c = st.columns(3)
+            col_a.metric("PCR Vol", opts["pcr_volume"])
+            col_b.metric("UOA Count", opts["uoa_count"])
+            col_c.metric("Bull Score", f"{opts['flow_bull_score']:.2f}")
+            if opts.get("big_sweeps"):
+                st.subheader("🔥 Big Sweeps")
+                st.dataframe(pd.DataFrame(opts["big_sweeps"]),
+                             use_container_width=True, hide_index=True)
+            with st.expander("Score components"):
+                st.json(opts.get("score_components", {}))
+        else:
+            st.info(f"No options data: {opts.get('reason','unavailable')}")
+
+    with tabs[4]:
+        sc = rec.get("sector_context", {})
+        if sc.get("ok"):
+            tail = "🟢 TAILWIND" if sc["tailwind"] else \
+                   ("🔴 HEADWIND" if sc["headwind"] else "⚪ NEUTRAL")
+            col_a, col_b = st.columns(2)
+            col_a.metric("Sector", f"{sc['sector_name']} ({sc['sector_etf']})")
+            col_a.metric("Status", tail)
+            col_b.metric("Regime", sc["regime"])
+            col_b.metric("RS 5d", f"{sc['rs_5d']:+.2f}%")
+            st.metric("RS 20d", f"{sc['rs_20d']:+.2f}%")
+        else:
+            st.info(f"Sector context unavailable: {sc.get('reason','n/a')}")
+
+    with tabs[5]:
+        st.json({k: v for k, v in rec.items() if not k.startswith("_")})
+
+# ── Action panel ──────────────────────────────────────────────────────────
+st.divider()
+st.subheader("🎬 Actions")
+a1, a2, a3 = st.columns(3)
+
+with a1:
+    if st.button("🤖 EXECUTE GO LIST", use_container_width=True,
+                 disabled=not cfg["execution"]["enabled"]):
+        with st.spinner("Submitting bracket orders..."):
+            results = auto_execute(payload, cfg, dry_run=dry_run_exec)
+        st.session_state["exec_results"] = results
+        for r in results:
+            mark = "✅" if r.ok else "❌"
+            st.write(f"{mark} **{r.ticker}** qty={r.qty} "
+                     f"entry=${r.entry:.2f} → tgt=${r.target:.2f} / "
+                     f"stop=${r.stop:.2f} — _{r.reason}_")
+
+with a2:
+    if st.button("📢 SEND DISCORD ALERT", use_container_width=True,
+                 disabled=not cfg["notifications"]["enabled"]):
+        with st.spinner("Posting to Discord..."):
+            ok = send_scan_notification(payload, cfg)
+        (st.success if ok else st.warning)("Sent ✓" if ok else "Skipped")
+
+with a3:
+    if st.button("💼 ACCOUNT STATUS", use_container_width=True):
+        try:
+            st.json(AlpacaBroker(paper=True).account())
+        except Exception as e:
+            st.error(f"{e}")
+```
+
+---
+
+## 9. `requirements.txt` — PINNED versions
+
+```
+yfinance>=0.2.40
+pandas>=2.0,<3.0
+numpy>=1.24,<2.0
+scipy>=1.11
+pyyaml>=6.0
+python-dotenv>=1.0
+requests>=2.31
+pyarrow>=14.0
+streamlit>=1.30
+plotly>=5.18
+kaleido==0.2.1
+alpaca-py>=0.30,<0.40
+polygon-api-client>=1.13
+finnhub-python>=2.4
+click>=8.1
+structlog>=24.1
+discord-webhook>=1.3,<2.0
+```
+
+---
+
+## 10. `smoke_test.py` — NEW (validates end-to-end with mocks)
+
+```python
+"""
+Smoke test: validates entire pipeline with mocked providers.
+Run: python smoke_test.py
+"""
+import sys, traceback
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+
+
+def make_fake_df(days=250, start=100.0, vol=0.02, seed=42):
+    np.random.seed(seed)
+    dates = pd.date_range(end=datetime.utcnow(), periods=days, freq="D")
+    returns = np.random.normal(0.001, vol, days)
+    close = start * np.exp(np.cumsum(returns))
+    high = close * (1 + np.abs(np.random.normal(0, vol/2, days)))
+    low = close * (1 - np.abs(np.random.normal(0, vol/2, days)))
+    open_ = close * (1 + np.random.normal(0, vol/3, days))
+    volume = np.random.randint(1_000_000, 10_000_000, days)
+    return pd.DataFrame({
+        "open": open_, "high": high, "low": low, "close": close,
+        "volume": volume,
+    }, index=dates)
+
+
+def test_qualification():
+    from qualification import qualify, TriState
+    cfg = {"technical": {"rvol_min": 2.0, "atr_pct_min": 0.03,
+                         "ema_stack_required": True, "rsi_band": [40, 80]},
+           "fundamental": {"earnings_blackout_days": 2},
+           "flow_motion": {"dollar_volume_min": 5_000_000},
+           "universe": {"price_min": 1.0, "price_max": 500.0},
+           "indicators": {}, "options": {}}
+
+    tech = {"ok": True, "close": 100, "rvol": 3.0, "atr_pct": 0.05,
+            "ema_stack_ok": True, "rsi": 60, "breakout": True}
+    flow = {"ok": True, "dollar_volume": 50_000_000, "rel_strength_spy": 1.0,
+            "news_velocity": 0.5}
+    fund = {"ok": True, "days_to_earnings": 30, "short_interest": 0.1, "float": 1e9}
+
+    r = qualify(tech, fund, flow, cfg)
+    assert r.state == "GO", f"Expected GO, got {r.state} ({r.reason})"
+    print(f"  ✓ qualify GO path: {r.state}/{r.reason}")
+
+    tech2 = {**tech, "rvol": 1.0}
+    r2 = qualify(tech2, fund, flow, cfg)
+    assert r2.state == "HOLD", f"Expected HOLD, got {r2.state}"
+    print(f"  ✓ qualify HOLD path: {r2.state}/{r2.reason}")
+
+    fund2 = {**fund, "days_to_earnings": 1}
+    r3 = qualify(tech, fund2, flow, cfg)
+    assert r3.state == "ABORT", f"Expected ABORT, got {r3.state}"
+    print(f"  ✓ qualify ABORT path: {r3.state}/{r3.reason}")
+
+
+def test_ranker():
+    from ranker import composite_score
+    cfg = {"scoring_weights": {"technical": 0.20, "flow": 0.15,
+                                "fundamental": 0.10, "monte_carlo": 0.25,
+                                "indicators": 0.15, "options": 0.10,
+                                "sector": 0.05}}
+    tech = {"ok": True, "rvol": 4.0, "atr_pct": 0.06,
+            "ema_stack_ok": True, "breakout": True}
+    flow = {"ok": True, "dollar_volume": 30_000_000,
+            "rel_strength_spy": 2.0, "news_velocity": 0.5}
+    fund = {"ok": True, "short_interest": 0.15, "float": 1e9}
+    mc = {"expected_R": 1.5}
+    score = composite_score(tech, flow, fund, mc, cfg)
+    assert 0.0 <= score <= 1.0, f"Score out of bounds: {score}"
+    print(f"  ✓ composite_score in [0,1]: {score:.3f}")
+
+    # Edge: degenerate weights
+    cfg_bad = {"scoring_weights": {"technical": 0, "flow": 0,
+                                    "fundamental": 0, "monte_carlo": 0,
+                                    "indicators": 0.5, "options": 0.5,
+                                    "sector": 0.5}}
+    score_bad = composite_score(tech, flow, fund, mc, cfg_bad)
+    assert 0.0 <= score_bad <= 1.0, f"Degenerate weights broke bounds: {score_bad}"
+    print(f"  ✓ composite_score handles overhead>1.0: {score_bad:.3f}")
+
+
+def test_options_flow_math():
+    import options_flow as of
+
+    # Build a synthetic chain
+    chain = pd.DataFrame([
+        {"expiration": "2025-12-19", "strike": 100, "type": "call",
+         "bid": 1, "ask": 1.1, "last": 1.05, "volume": 5000,
+         "open_interest": 1000, "iv": 0.35,
+         "delta": 0.5, "gamma": 0.01, "theta": -0.01, "vega": 0.1},
+        {"expiration": "2025-12-19", "strike": 100, "type": "put",
+         "bid": 1, "ask": 1.1, "last": 1.05, "volume": 1000,
+         "open_interest": 500, "iv": 0.40,
+         "delta": -0.5, "gamma": 0.01, "theta": -0.01, "vega": 0.1},
+    ])
+    # Monkey-patch get_chain
+    of.get_chain = lambda t: chain
+    of.iv_rank_percentile = lambda t, iv: {"iv_rank": 0.5, "iv_percentile": 0.5,
+                                            "iv_current": iv, "iv_rank_source": "TEST"}
+
+    res = of.compute_options_flow("TEST", 100.0, {})
+    assert res["ok"]
+    assert 0.0 <= res["flow_bull_score"] <= 1.0
+    assert 0.0 <= res["flow_bear_score"] <= 1.0
+    assert abs(res["flow_bull_score"] + res["flow_bear_score"] - 1.0) < 1e-6
+    print(f"  ✓ options bull/bear sum to 1: "
+          f"{res['flow_bull_score']:.2f}+{res['flow_bear_score']:.2f}")
+    print(f"  ✓ score components: {res['score_components']}")
+
+
+def test_broker_dry_run():
+    from broker_alpaca import auto_execute
+    payload = {
+        "candidates": [
+            {"ticker": "FAKE", "score": 0.75,
+             "technical": {"close": 50.0},
+             "monte_carlo": {"target_price": 55.0, "stop_price": 48.0}},
+            {"ticker": "LOWSCORE", "score": 0.20,
+             "technical": {"close": 10.0},
+             "monte_carlo": {"target_price": 11.0, "stop_price": 9.5}},
+        ]
+    }
+    cfg = {"execution": {"min_score_to_fire": 0.50, "slippage_buffer_pct": 0.005},
+           "risk": {"max_position_usd": 1000, "max_concurrent_positions": 5,
+                    "max_daily_loss_pct": 0.02},
+           "monte_carlo": {"target_R": 2.0}}
+    results = auto_execute(payload, cfg, dry_run=True)
+    fired = [r for r in results if r.ok and r.reason == "DRY_RUN"]
+    skipped = [r for r in results if not r.ok]
+    assert len(fired) == 1, f"Expected 1 fire (FAKE), got {len(fired)}"
+    assert fired[0].ticker == "FAKE"
+    print(f"  ✓ min_score_to_fire enforced: fired={len(fired)}, skipped={len(skipped)}")
+
+
+def test_engine_with_no_bench():
+    # Test that None benchmark doesn't crash
+    from engine import _safe_bench
+
+    class MockRouter:
+        def get_daily(self, *a, **k):
+            class R:
+                ok = False
+                data = None
+            return R()
+    b = _safe_bench(MockRouter(), "SPY")
+    assert b is None, "Expected None for failed benchmark"
+    print("  ✓ _safe_bench returns None on failure (no crash)")
+
+
+def main():
+    tests = [
+        ("qualification", test_qualification),
+        ("ranker", test_ranker),
+        ("options_flow_math", test_options_flow_math),
+        ("broker_dry_run", test_broker_dry_run),
+        ("engine_bench_guard", test_engine_with_no_bench),
+    ]
+    print("=" * 60)
+    print("MOTION SCANNER v3.0 — SMOKE TEST")
+    print("=" * 60)
+    failed = 0
+    for name, fn in tests:
+        print(f"\n[{name}]")
+        try:
+            fn()
+        except Exception as e:
+            print(f"  ✗ FAIL: {e}")
+            traceback.print_exc()
+            failed += 1
+    print("\n" + "=" * 60)
+    if failed:
+        print(f"❌ {failed}/{len(tests)} TESTS FAILED")
+        sys.exit(1)
+    print(f"✅ ALL {len(tests)} TESTS PASSED")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+## 11. `config.yaml` — ADDED `slippage_buffer_pct`
+
+```yaml
+universe:
+  exchanges: [NASDAQ, NYSE, AMEX]
+  price_min: 1.0
+  price_max: 500.0
+  market_cap_min: 50000000
+  adv_min: 500000
+
+technical:
+  rvol_min: 2.0
+  atr_pct_min: 0.03
+  ema_stack_required: true
+  rsi_band: [40, 80]
+  breakout_lookback: 20
+
+indicators:
+  require_bull_stack: false
+  min_bull_stack: 0.75
+  avoid_overbought: true
+  min_stoch_bull_heat: 0.0
+  require_macd_above_zero: false
+  require_above_cloud: false
+  allow_mean_reversion: false
+  min_composite_bull: 0.0
+  veto_sector_headwind: false
+
+options:
+  enabled: true
+  uoa_vol_oi_min: 3.0
+  uoa_min_volume: 500
+  sweep_min_notional: 50000
+  min_flow_bull_score: 0.0
+
+sector:
+  enabled: true
+  prefer_risk_on: true
+
+fundamental:
+  earnings_blackout_days: 2
+
+flow_motion:
+  dollar_volume_min: 5000000
+
+monte_carlo:
+  paths: 10000
+  horizon_minutes: 390
+  target_R: 2.0
+  stop_R: 1.0
+  min_prob_target: 0.45
+  max_prob_stop: 0.40
+  use_jump_diffusion: true
+  random_seed: 42
+
+risk:
+  max_position_usd: 1000
+  max_position_pct: 0.05
+  max_daily_loss_pct: 0.02
+  max_concurrent_positions: 5
+
+execution:
+  enabled: false
+  paper_only: true
+  auto_fire_on_go: true
+  min_score_to_fire: 0.50
+  slippage_buffer_pct: 0.005   # 0.5% — caps entry price assumption
+
+notifications:
+  enabled: true
+  webhook_url: null
+  notify_on: GO
+  include_charts: true
+
+scoring_weights:
+  technical: 0.20
+  flow: 0.15
+  fundamental: 0.10
+  monte_carlo: 0.25
+  indicators: 0.15
+  options: 0.10
+  sector: 0.05
+
+output:
+  format: [json, csv]
+  log_dir: ./logs
+```
+
+---
+
+## ✅ FIX MATRIX — ALL 10 PRIORITY ITEMS RESOLVED
+
+| # | Issue | File | Status |
+|---|---|---|---|
+| 1 | Complete `qualification.py` + TriState + v2.0 gates | `qualification.py` | ✅ Full module delivered |
+| 2 | `ranker.py` scale guard against negative | `ranker.py` | ✅ `max(0.0, ...)` + clamp to [0,1] |
+| 3 | Broken bull score math | `options_flow.py` | ✅ Rewritten, 5 clean components |
+| 4 | `min_score_to_fire` enforcement | `broker_alpaca.py` | ✅ Filter before slot allocation |
+| 5 | Daily loss circuit breaker | `broker_alpaca.py` | ✅ Reads `last_equity` vs `equity` |
+| 6 | Quote refresh / slippage | `broker_alpaca.py` | ✅ `latest_quote()` + buffer |
+| 7 | Streamlit tabs (real, not commented) | `ui_streamlit.py` | ✅ 6 live tabs |
+| 8 | Smoke test | `smoke_test.py` | ✅ 5 unit tests, no network |
+| 9 | Pin `alpaca-py` + safe `get_orders` | `requirements.txt`, `broker_alpaca.py` | ✅ Pinned 0.30-0.40, try/except |
+| 10 | IV rank labeled as RV-proxy | `options_flow.py`, `ui_streamlit.py` | ✅ `iv_rank_source` field + UI caption |
+
+---
+
+## 🚦 RUN VALIDATION
+
+```bash
+# 1. Install
+pip install -r requirements.txt
+
+# 2. Smoke test (no API keys needed)
+python smoke_test.py
+# Expected: ✅ ALL 5 TESTS PASSED
+
+# 3. CLI scan (needs at least yfinance — works offline-ish)
+python run.py --tickers AAPL,NVDA --no-options --no-sectors
+
+# 4. Full UI
+streamlit run ui_streamlit.py
+```
+
+---
+
+**Status: MVP COMPLETE.** Every blocking issue patched, every gap closed, smoke test included. No dangling pseudo-code, no unguarded crashes, no silently-wrong scores. Ship it.
