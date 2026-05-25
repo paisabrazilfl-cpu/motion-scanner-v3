@@ -306,6 +306,13 @@ export interface ApiKeyInput {
   discordWebhookUrl?: string | null;
 }
 
+export interface ScreenerResult {
+  results: CandidateRecord[];
+  total: number;
+  scanned: number;
+  cachedAt: string;
+}
+
 export interface Note {
   id: number;
   tenantId: number;
@@ -388,6 +395,49 @@ export type ListScanHistoryParams = {
 limit?: number;
 offset?: number;
 };
+
+export type RunScreenerParams = {
+priceMin?: number;
+priceMax?: number;
+rsiMin?: number;
+rsiMax?: number;
+adxMin?: number;
+rvolMin?: number;
+scoreMin?: number;
+verdictFilter?: RunScreenerVerdictFilter;
+aboveEma10?: boolean;
+aboveSma20?: boolean;
+emaStackRequired?: boolean;
+stochMin?: number;
+stochMax?: number;
+macd3mAboveZero?: boolean;
+macd3mHistPositive?: boolean;
+breakoutOnly?: boolean;
+universe?: RunScreenerUniverse;
+bust?: boolean;
+};
+
+export type RunScreenerVerdictFilter = typeof RunScreenerVerdictFilter[keyof typeof RunScreenerVerdictFilter];
+
+
+export const RunScreenerVerdictFilter = {
+  all: 'all',
+  go: 'go',
+  go_hold: 'go_hold',
+} as const;
+
+export type RunScreenerUniverse = typeof RunScreenerUniverse[keyof typeof RunScreenerUniverse];
+
+
+export const RunScreenerUniverse = {
+  sp100: 'sp100',
+  tech: 'tech',
+  finance: 'finance',
+  health: 'health',
+  energy: 'energy',
+  consumer: 'consumer',
+  all: 'all',
+} as const;
 
 export type GetNewsParams = {
 category?: GetNewsCategory;

@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: Activity },
-  { href: "/scanner", label: "Scanner", icon: BarChart2 },
+  { href: "/scanner", label: "Stock Finder", icon: BarChart2 },
   { href: "/sector", label: "Sector Rotation", icon: BarChart2 },
   { href: "/watchlists", label: "Watchlists", icon: List },
   { href: "/broker", label: "Broker", icon: Briefcase },

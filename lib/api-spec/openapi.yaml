@@ -292,6 +292,75 @@ paths:
               schema:
                 $ref: "#/components/schemas/SectorRotation"
 
+  # ── SCREENER ───────────────────────────────────────────────────────────────
+  /screener:
+    get:
+      operationId: runScreener
+      tags: [scan]
+      summary: Reverse screener — find stocks matching filter parameters from the S&P 100 universe
+      parameters:
+        - name: priceMin
+          in: query
+          schema: { type: number, default: 1 }
+        - name: priceMax
+          in: query
+          schema: { type: number, default: 10000 }
+        - name: rsiMin
+          in: query
+          schema: { type: number, default: 0 }
+        - name: rsiMax
+          in: query
+          schema: { type: number, default: 100 }
+        - name: adxMin
+          in: query
+          schema: { type: number, default: 0 }
+        - name: rvolMin
+          in: query
+          schema: { type: number, default: 0 }
+        - name: scoreMin
+          in: query
+          schema: { type: number, default: 0 }
+        - name: verdictFilter
+          in: query
+          schema: { type: string, enum: [all, go, go_hold], default: all }
+        - name: aboveEma10
+          in: query
+          schema: { type: boolean }
+        - name: aboveSma20
+          in: query
+          schema: { type: boolean }
+        - name: emaStackRequired
+          in: query
+          schema: { type: boolean }
+        - name: stochMin
+          in: query
+          schema: { type: number }
+        - name: stochMax
+          in: query
+          schema: { type: number }
+        - name: macd3mAboveZero
+          in: query
+          schema: { type: boolean }
+        - name: macd3mHistPositive
+          in: query
+          schema: { type: boolean }
+        - name: breakoutOnly
+          in: query
+          schema: { type: boolean }
+        - name: universe
+          in: query
+          schema: { type: string, enum: [sp100, tech, finance, health, energy, consumer, all], default: sp100 }
+        - name: bust
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Screener results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScreenerResult"
+
   # ── NOTES ─────────────────────────────────────────────────────────────────
   /notes:
     get:
@@ -873,6 +942,21 @@ components:
         discordWebhookUrl:
           type: ["string", "null"]
 
+
+    ScreenerResult:
+      type: object
+      required: [results, total, scanned, cachedAt]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/CandidateRecord"
+        total:
+          type: integer
+        scanned:
+          type: integer
+        cachedAt:
+          type: string
     # ── NOTES ─────────────────────────────────────────────────────────────
     Note:
       type: object

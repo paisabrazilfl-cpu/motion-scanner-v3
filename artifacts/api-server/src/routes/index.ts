@@ -10,11 +10,13 @@ import apikeysRouter from "./apikeys";
 import chartRouter from "./chart";
 import newsRouter from "./news";
 import notesRouter from "./notes";
+import screenerRouter from "./screener";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(scanRouter);
+router.use(screenerRouter);
 router.use(watchlistsRouter);
 router.use(configRouter);
 router.use(brokerRouter);

@@ -347,6 +347,62 @@ export const GetSectorRotationResponse = zod.object({
 
 
 /**
+ * @summary Reverse screener — find stocks matching filter parameters from the S&P 100 universe
+ */
+export const runScreenerQueryPriceMinDefault = 1;
+export const runScreenerQueryPriceMaxDefault = 10000;
+export const runScreenerQueryRsiMinDefault = 0;
+export const runScreenerQueryRsiMaxDefault = 100;
+export const runScreenerQueryAdxMinDefault = 0;
+export const runScreenerQueryRvolMinDefault = 0;
+export const runScreenerQueryScoreMinDefault = 0;
+export const runScreenerQueryVerdictFilterDefault = `all`;
+export const runScreenerQueryUniverseDefault = `sp100`;
+
+export const RunScreenerQueryParams = zod.object({
+  "priceMin": zod.coerce.number().default(runScreenerQueryPriceMinDefault),
+  "priceMax": zod.coerce.number().default(runScreenerQueryPriceMaxDefault),
+  "rsiMin": zod.coerce.number().default(runScreenerQueryRsiMinDefault),
+  "rsiMax": zod.coerce.number().default(runScreenerQueryRsiMaxDefault),
+  "adxMin": zod.coerce.number().default(runScreenerQueryAdxMinDefault),
+  "rvolMin": zod.coerce.number().default(runScreenerQueryRvolMinDefault),
+  "scoreMin": zod.coerce.number().default(runScreenerQueryScoreMinDefault),
+  "verdictFilter": zod.enum(['all', 'go', 'go_hold']).default(runScreenerQueryVerdictFilterDefault),
+  "aboveEma10": zod.coerce.boolean().optional(),
+  "aboveSma20": zod.coerce.boolean().optional(),
+  "emaStackRequired": zod.coerce.boolean().optional(),
+  "stochMin": zod.coerce.number().optional(),
+  "stochMax": zod.coerce.number().optional(),
+  "macd3mAboveZero": zod.coerce.boolean().optional(),
+  "macd3mHistPositive": zod.coerce.boolean().optional(),
+  "breakoutOnly": zod.coerce.boolean().optional(),
+  "universe": zod.enum(['sp100', 'tech', 'finance', 'health', 'energy', 'consumer', 'all']).default(runScreenerQueryUniverseDefault),
+  "bust": zod.coerce.boolean().optional()
+})
+
+export const RunScreenerResponse = zod.object({
+  "results": zod.array(zod.object({
+  "ticker": zod.string(),
+  "verdict": zod.enum(['GO', 'HOLD', 'ABORT']),
+  "score": zod.number(),
+  "reason": zod.string().optional(),
+  "technical": zod.record(zod.string(), zod.unknown()).nullish(),
+  "fundamentals": zod.record(zod.string(), zod.unknown()).nullish(),
+  "flow": zod.record(zod.string(), zod.unknown()).nullish(),
+  "monteCarlo": zod.record(zod.string(), zod.unknown()).nullish(),
+  "indicators": zod.record(zod.string(), zod.unknown()).nullish(),
+  "optionsFlow": zod.record(zod.string(), zod.unknown()).nullish(),
+  "options": zod.record(zod.string(), zod.unknown()).nullish(),
+  "sentiment": zod.record(zod.string(), zod.unknown()).nullish(),
+  "sectorContext": zod.record(zod.string(), zod.unknown()).nullish()
+})),
+  "total": zod.number(),
+  "scanned": zod.number(),
+  "cachedAt": zod.string()
+})
+
+
+/**
  * @summary List all notes for the current tenant
  */
 export const GetNotesResponseItem = zod.object({

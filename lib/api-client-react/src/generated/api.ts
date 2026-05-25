@@ -37,12 +37,14 @@ import type {
   Note,
   NoteInput,
   Position,
+  RunScreenerParams,
   ScanConfig,
   ScanConfigInput,
   ScanHistoryItem,
   ScanHistoryList,
   ScanRequest,
   ScanResult,
+  ScreenerResult,
   SectorRotation,
   Watchlist,
   WatchlistInput
@@ -1174,6 +1176,90 @@ export function useGetSectorRotation<TData = Awaited<ReturnType<typeof getSector
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetSectorRotationQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getRunScreenerUrl = (params?: RunScreenerParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/screener?${stringifiedParams}` : `/api/screener`
+}
+
+/**
+ * @summary Reverse screener — find stocks matching filter parameters from the S&P 100 universe
+ */
+export const runScreener = async (params?: RunScreenerParams, options?: RequestInit): Promise<ScreenerResult> => {
+
+  return customFetch<ScreenerResult>(getRunScreenerUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getRunScreenerQueryKey = (params?: RunScreenerParams,) => {
+    return [
+    `/api/screener`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getRunScreenerQueryOptions = <TData = Awaited<ReturnType<typeof runScreener>>, TError = ErrorType<unknown>>(params?: RunScreenerParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof runScreener>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getRunScreenerQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof runScreener>>> = ({ signal }) => runScreener(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof runScreener>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type RunScreenerQueryResult = NonNullable<Awaited<ReturnType<typeof runScreener>>>
+export type RunScreenerQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Reverse screener — find stocks matching filter parameters from the S&P 100 universe
+ */
+
+export function useRunScreener<TData = Awaited<ReturnType<typeof runScreener>>, TError = ErrorType<unknown>>(
+ params?: RunScreenerParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof runScreener>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getRunScreenerQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
