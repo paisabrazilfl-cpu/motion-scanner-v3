@@ -292,6 +292,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/SectorRotation"
 
+  # ── NEWS ──────────────────────────────────────────────────────────────────
+  /news:
+    get:
+      operationId: getNews
+      tags: [scan]
+      summary: Tier-1 financial news feed (global + USA)
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [general, forex, merger, all]
+            default: all
+      responses:
+        "200":
+          description: News articles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsFeed"
+
   # ── CHART ─────────────────────────────────────────────────────────────────
   /chart/{ticker}:
     get:
@@ -780,6 +801,52 @@ components:
           type: ["string", "null"]
         discordWebhookUrl:
           type: ["string", "null"]
+
+    # ── NEWS ──────────────────────────────────────────────────────────────
+    NewsArticle:
+      type: object
+      required: [id, headline, summary, source, sourceLabel, url, publishedAt, relatedTickers, category, sentiment, isBreaking]
+      properties:
+        id:
+          type: string
+        headline:
+          type: string
+        summary:
+          type: string
+        source:
+          type: string
+        sourceLabel:
+          type: string
+        url:
+          type: string
+        image:
+          type: ["string", "null"]
+        publishedAt:
+          type: string
+        relatedTickers:
+          type: array
+          items:
+            type: string
+        category:
+          type: string
+        sentiment:
+          type: string
+          enum: [bullish, bearish, neutral]
+        isBreaking:
+          type: boolean
+
+    NewsFeed:
+      type: object
+      required: [articles, source, category]
+      properties:
+        articles:
+          type: array
+          items:
+            $ref: "#/components/schemas/NewsArticle"
+        source:
+          type: string
+        category:
+          type: string
 
     # ── CHART ─────────────────────────────────────────────────────────────
     Candle:

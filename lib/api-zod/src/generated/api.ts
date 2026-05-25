@@ -347,6 +347,35 @@ export const GetSectorRotationResponse = zod.object({
 
 
 /**
+ * @summary Tier-1 financial news feed (global + USA)
+ */
+export const getNewsQueryCategoryDefault = `all`;
+
+export const GetNewsQueryParams = zod.object({
+  "category": zod.enum(['general', 'forex', 'merger', 'all']).default(getNewsQueryCategoryDefault)
+})
+
+export const GetNewsResponse = zod.object({
+  "articles": zod.array(zod.object({
+  "id": zod.string(),
+  "headline": zod.string(),
+  "summary": zod.string(),
+  "source": zod.string(),
+  "sourceLabel": zod.string(),
+  "url": zod.string(),
+  "image": zod.string().nullish(),
+  "publishedAt": zod.string(),
+  "relatedTickers": zod.array(zod.string()),
+  "category": zod.string(),
+  "sentiment": zod.enum(['bullish', 'bearish', 'neutral']),
+  "isBreaking": zod.boolean()
+})),
+  "source": zod.string(),
+  "category": zod.string()
+})
+
+
+/**
  * @summary OHLCV candle data for a ticker
  */
 export const GetChartParams = zod.object({

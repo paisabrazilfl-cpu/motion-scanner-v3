@@ -306,6 +306,37 @@ export interface ApiKeyInput {
   discordWebhookUrl?: string | null;
 }
 
+export type NewsArticleSentiment = typeof NewsArticleSentiment[keyof typeof NewsArticleSentiment];
+
+
+export const NewsArticleSentiment = {
+  bullish: 'bullish',
+  bearish: 'bearish',
+  neutral: 'neutral',
+} as const;
+
+export interface NewsArticle {
+  id: string;
+  headline: string;
+  summary: string;
+  source: string;
+  sourceLabel: string;
+  url: string;
+  /** @nullable */
+  image?: string | null;
+  publishedAt: string;
+  relatedTickers: string[];
+  category: string;
+  sentiment: NewsArticleSentiment;
+  isBreaking: boolean;
+}
+
+export interface NewsFeed {
+  articles: NewsArticle[];
+  source: string;
+  category: string;
+}
+
 export interface Candle {
   time: number;
   open: number;
@@ -343,6 +374,20 @@ export type ListScanHistoryParams = {
 limit?: number;
 offset?: number;
 };
+
+export type GetNewsParams = {
+category?: GetNewsCategory;
+};
+
+export type GetNewsCategory = typeof GetNewsCategory[keyof typeof GetNewsCategory];
+
+
+export const GetNewsCategory = {
+  general: 'general',
+  forex: 'forex',
+  merger: 'merger',
+  all: 'all',
+} as const;
 
 export type GetChartParams = {
 range?: GetChartRange;
