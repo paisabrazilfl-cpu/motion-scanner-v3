@@ -376,7 +376,7 @@ export const RunScreenerQueryParams = zod.object({
   "macd3mAboveZero": zod.coerce.boolean().optional(),
   "macd3mHistPositive": zod.coerce.boolean().optional(),
   "breakoutOnly": zod.coerce.boolean().optional(),
-  "universe": zod.enum(['sp100', 'tech', 'finance', 'health', 'energy', 'consumer', 'all']).default(runScreenerQueryUniverseDefault),
+  "universe": zod.enum(['sp100', 'nasdaq100', 'dow30', 'tech', 'finance', 'health', 'energy', 'consumer', 'industrials', 'utilities', 'materials', 'realestate', 'comms', 'semis', 'biotech', 'smallcap', 'mags7', 'aicloud', 'dividend', 'all']).default(runScreenerQueryUniverseDefault),
   "bust": zod.coerce.boolean().optional()
 })
 

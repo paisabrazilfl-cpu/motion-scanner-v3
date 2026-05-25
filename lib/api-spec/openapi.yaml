@@ -349,7 +349,7 @@ paths:
           schema: { type: boolean }
         - name: universe
           in: query
-          schema: { type: string, enum: [sp100, tech, finance, health, energy, consumer, all], default: sp100 }
+          schema: { type: string, enum: [sp100, nasdaq100, dow30, tech, finance, health, energy, consumer, industrials, utilities, materials, realestate, comms, semis, biotech, smallcap, mags7, aicloud, dividend, all], default: sp100 }
         - name: bust
           in: query
           schema: { type: boolean }

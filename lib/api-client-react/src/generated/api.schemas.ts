@@ -431,11 +431,24 @@ export type RunScreenerUniverse = typeof RunScreenerUniverse[keyof typeof RunScr
 
 export const RunScreenerUniverse = {
   sp100: 'sp100',
+  nasdaq100: 'nasdaq100',
+  dow30: 'dow30',
   tech: 'tech',
   finance: 'finance',
   health: 'health',
   energy: 'energy',
   consumer: 'consumer',
+  industrials: 'industrials',
+  utilities: 'utilities',
+  materials: 'materials',
+  realestate: 'realestate',
+  comms: 'comms',
+  semis: 'semis',
+  biotech: 'biotech',
+  smallcap: 'smallcap',
+  mags7: 'mags7',
+  aicloud: 'aicloud',
+  dividend: 'dividend',
   all: 'all',
 } as const;
 

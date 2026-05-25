@@ -550,13 +550,30 @@ function FilterPanel({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="sp100">S&P 100</SelectItem>
+            <div className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Broad Indices</div>
+            <SelectItem value="sp100">S&amp;P 100</SelectItem>
+            <SelectItem value="nasdaq100">Nasdaq 100</SelectItem>
+            <SelectItem value="dow30">Dow Jones 30</SelectItem>
+            <div className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mt-1">GICS Sectors</div>
             <SelectItem value="tech">Technology</SelectItem>
             <SelectItem value="finance">Financials</SelectItem>
             <SelectItem value="health">Healthcare</SelectItem>
             <SelectItem value="energy">Energy</SelectItem>
             <SelectItem value="consumer">Consumer</SelectItem>
-            <SelectItem value="all">All (~200 tickers)</SelectItem>
+            <SelectItem value="industrials">Industrials</SelectItem>
+            <SelectItem value="utilities">Utilities</SelectItem>
+            <SelectItem value="materials">Materials</SelectItem>
+            <SelectItem value="realestate">Real Estate / REITs</SelectItem>
+            <SelectItem value="comms">Communication Services</SelectItem>
+            <div className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mt-1">Thematic</div>
+            <SelectItem value="semis">Semiconductors</SelectItem>
+            <SelectItem value="biotech">Biotech</SelectItem>
+            <SelectItem value="smallcap">Small Cap</SelectItem>
+            <SelectItem value="mags7">Magnificent 7</SelectItem>
+            <SelectItem value="aicloud">AI &amp; Cloud</SelectItem>
+            <SelectItem value="dividend">Dividend Leaders</SelectItem>
+            <div className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mt-1">All</div>
+            <SelectItem value="all">Everything (~300+ tickers)</SelectItem>
           </SelectContent>
         </Select>
       </div>

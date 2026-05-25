@@ -8,6 +8,8 @@ import type { TenantProviderKeys } from "../lib/providers";
 const router = Router();
 
 // ── Universe definitions ──────────────────────────────────────────────────
+
+// ─ Broad indices ─────────────────────────────────────────────────────────
 const UNIVERSE_SP100 = [
   "AAPL","MSFT","NVDA","AMZN","GOOGL","META","LLY","AVGO","JPM",
   "TSLA","UNH","XOM","V","COST","NFLX","ORCL","MA","WMT","JNJ",
@@ -21,6 +23,24 @@ const UNIVERSE_SP100 = [
   "CME","CL","FISV","AON","ITW","F","GM","FCX","PYPL","UBER",
 ];
 
+const UNIVERSE_NASDAQ100 = [
+  "AAPL","MSFT","NVDA","AMZN","META","GOOGL","AVGO","TSLA","COST","NFLX",
+  "ORCL","ADBE","AMD","QCOM","INTU","TXN","CSCO","AMGN","ISRG","HON",
+  "BKNG","VRTX","REGN","PANW","LRCX","KLAC","AMAT","SNPS","CDNS","MRVL",
+  "ADI","CRWD","MELI","ASML","MDB","DDOG","TEAM","WDAY","ZS","FTNT",
+  "PCAR","PAYX","CTAS","FAST","ODFL","BIIB","IDXX","GEHC","EXC","FANG",
+  "DLTR","WBD","VRSK","ON","ALGN","ROST","AEP","XEL","CTSH","ANSS",
+  "ILMN","MRNA","TTWO","SIRI","NXPI","APP","PLTR","ABNB","CEG","MKL",
+  "ENPH","CPRT","DXCM","GILD","SBUX","KDP","MAR","PYPL","MDLZ","AZN",
+];
+
+const UNIVERSE_DOW30 = [
+  "AAPL","MSFT","JPM","V","WMT","MCD","HON","HD","CAT","IBM",
+  "GS","BA","UNH","JNJ","PG","CVX","AMGN","DIS","MMM","KO",
+  "CRM","AXP","MRK","NKE","TRV","DOW","CSCO","VZ","WBA","INTC",
+];
+
+// ─ GICS Sectors ──────────────────────────────────────────────────────────
 const UNIVERSE_TECH = [
   "AAPL","MSFT","NVDA","GOOGL","META","AVGO","ORCL","CSCO","ADBE","AMD",
   "INTU","QCOM","ADI","TXN","CRM","NOW","LRCX","AMAT","KLAC","SNPS",
@@ -31,18 +51,21 @@ const UNIVERSE_TECH = [
 const UNIVERSE_FINANCE = [
   "JPM","BAC","WFC","GS","MS","C","BLK","SCHW","AXP","V","MA",
   "USB","PNC","COF","DFS","SPGI","MCO","ICE","CME","CB",
-  "MMC","AON","MET","PRU","AFL","ALL","PGR","AIG","TROW",
+  "MMC","AON","MET","PRU","AFL","ALL","PGR","AIG","TROW","CINF",
+  "FDS","RJF","SF","NTRS","STT","BK","FITB","RF","HBAN","CFG",
 ];
 
 const UNIVERSE_HEALTH = [
   "UNH","JNJ","ABBV","LLY","MRK","TMO","ABT","DHR","AMGN","GILD",
   "MDT","SYK","ISRG","REGN","VRTX","CI","BMY","ZTS","BIIB",
   "ILMN","BDX","DXCM","IDXX","IQV","HCA","DGX","LH","CAH","MCK",
+  "CNC","MOH","HUM","CVS","GEHC","SOLV","PODD","ALGN","EW","BAX",
 ];
 
 const UNIVERSE_ENERGY = [
   "XOM","CVX","EOG","COP","SLB","MPC","PSX","VLO","OXY",
   "HES","DVN","BKR","HAL","MRO","APA","CTRA","NOV","HP","TRGP","KMI",
+  "WMB","OKE","LNG","CVI","DINO","SM","PR","CIVI","MGY","VTLE",
 ];
 
 const UNIVERSE_CONSUMER = [
@@ -51,14 +74,112 @@ const UNIVERSE_CONSUMER = [
   "DLTR","POOL","WSM","RH","ORLY","AZO","CASY","WBA","KR","SYY",
 ];
 
+const UNIVERSE_INDUSTRIALS = [
+  "HON","UPS","CAT","GE","RTX","DE","LMT","NOC","GD","BA",
+  "ETN","EMR","ITW","PH","ROK","AME","FTV","DOV","GNRC","XYL",
+  "FAST","ODFL","CHRW","NSC","CSX","UNP","CP","CNI","WAB","EXPD",
+  "LHX","LDOS","BAH","SAIC","CACI","DRS","HII","TDG","HEICO","TXT",
+];
+
+const UNIVERSE_UTILITIES = [
+  "NEE","SO","DUK","AEP","SRE","D","EXC","XEL","PCG","ED",
+  "AWK","PPL","FE","ETR","AES","NRG","CMS","LNT","PNW","NI",
+  "EVRG","OGE","WEC","WTRG","SWX","AVA","IDA","BKH","POR","NWE",
+];
+
+const UNIVERSE_MATERIALS = [
+  "LIN","APD","ECL","SHW","PPG","NEM","FCX","NUE","STLD","RS",
+  "CF","MOS","FMC","ALB","BALL","PKG","IP","WRK","SEE","SON",
+  "VMC","MLM","EXP","SLGN","GEF","CLF","AA","X","CMC","ATI",
+];
+
+const UNIVERSE_REALESTATE = [
+  "PLD","AMT","EQIX","CCI","WELL","O","SPG","DLR","PSA","AVB",
+  "EQR","INVH","NLY","AGNC","MPW","VTR","PEAK","HST","KIM","FRT",
+  "REG","BRX","EPR","SKT","NNN","STAG","REXR","EGP","FR","COLD",
+];
+
+const UNIVERSE_COMMS = [
+  "GOOGL","META","NFLX","DIS","T","VZ","CMCSA","TMUS","CHTR","LYV",
+  "EA","TTWO","RBLX","SNAP","PINS","SPOT","WBD","PARA","FOXA","FOX",
+  "NYT","NWSA","OMC","IPG","ZETA","IAS","DV","MGNI","TTD","PUBM",
+];
+
+// ─ Thematic ──────────────────────────────────────────────────────────────
+const UNIVERSE_SEMIS = [
+  "NVDA","AVGO","TSM","QCOM","AMD","TXN","ADI","MU","LRCX","AMAT",
+  "KLAC","SNPS","CDNS","MRVL","ON","NXPI","SWKS","QRVO","MPWR","WOLF",
+  "SLAB","SITM","ALGM","AEHR","FORM","ACLS","UCTT","ONTO","AMBA","SMTC",
+  "OLED","MKSI","COHU","ICHR","CAMT","ENTG","AZTA","BRKS","KLIC","CCMP",
+];
+
+const UNIVERSE_BIOTECH = [
+  "AMGN","GILD","REGN","VRTX","BIIB","MRNA","ILMN","DXCM","IDXX","SGEN",
+  "ALNY","BMRN","EXEL","IONS","HALO","SRPT","ARWR","FOLD","KRYS","RARE",
+  "ACAD","INVA","ARVN","ROIV","KYMR","BLUE","RCKT","EDIT","NTLA","CRSP",
+  "BEAM","PACB","VERV","PRME","TGTX","IMVT","JAZZ","INCY","SRTX","ACAD",
+];
+
+const UNIVERSE_SMALLCAP = [
+  "AFRM","HOOD","UPST","SOFI","LC","DAVE","OPEN","UWMC","PFSI","GHLD",
+  "CELH","USFD","CHWY","W","PRCT","HIMS","ACMR","VLD","SEER","RELY",
+  "ASAN","BRZE","CWAN","ALTR","TASK","TASK","GTX","PAGS","CAAP","TFII",
+  "COUR","UDMY","DUOL","SMAR","DOMO","YEXT","FSLY","BAND","LPSN","HUBS",
+  "MNDY","BILL","PCTY","PAYC","TOST","FOUR","GPN","RPAY","EVERI","PAYO",
+];
+
+const UNIVERSE_MAGS7 = [
+  "AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA",
+];
+
+const UNIVERSE_AICLOUD = [
+  "NVDA","MSFT","GOOGL","AMZN","META","ORCL","CRM","NOW","SNOW","MDB",
+  "DDOG","PLTR","AI","BBAI","SOUN","GFAI","ARQQ","IQ","PATH","AAON",
+  "ANET","SMCI","DELL","HPE","NTAP","PSTG","BOX","OKTA","ZI","GTLB",
+];
+
+const UNIVERSE_DIVIDEND = [
+  "JNJ","PG","KO","MCD","PEP","MMM","CL","CLX","GIS","MO",
+  "PM","T","VZ","O","NNN","STAG","D","SO","DUK","ED",
+  "AEP","XEL","WEC","CMS","LNT","PPL","NFG","NI","SWX","PNW",
+  "ABBV","BMY","MRK","AMGN","GILD","ABT","MDT","BDX","SYK","ZBH",
+];
+
+const ALL_TICKERS = [...new Set([
+  ...UNIVERSE_SP100, ...UNIVERSE_NASDAQ100, ...UNIVERSE_DOW30,
+  ...UNIVERSE_TECH, ...UNIVERSE_FINANCE, ...UNIVERSE_HEALTH,
+  ...UNIVERSE_ENERGY, ...UNIVERSE_CONSUMER, ...UNIVERSE_INDUSTRIALS,
+  ...UNIVERSE_UTILITIES, ...UNIVERSE_MATERIALS, ...UNIVERSE_REALESTATE,
+  ...UNIVERSE_COMMS, ...UNIVERSE_SEMIS, ...UNIVERSE_BIOTECH,
+  ...UNIVERSE_SMALLCAP, ...UNIVERSE_MAGS7, ...UNIVERSE_AICLOUD,
+  ...UNIVERSE_DIVIDEND,
+])];
+
 const UNIVERSES: Record<string, string[]> = {
-  sp100: UNIVERSE_SP100,
-  tech: UNIVERSE_TECH,
-  finance: UNIVERSE_FINANCE,
-  health: UNIVERSE_HEALTH,
-  energy: UNIVERSE_ENERGY,
+  // Broad indices
+  sp100:    UNIVERSE_SP100,
+  nasdaq100:UNIVERSE_NASDAQ100,
+  dow30:    UNIVERSE_DOW30,
+  // GICS sectors
+  tech:     UNIVERSE_TECH,
+  finance:  UNIVERSE_FINANCE,
+  health:   UNIVERSE_HEALTH,
+  energy:   UNIVERSE_ENERGY,
   consumer: UNIVERSE_CONSUMER,
-  all: [...new Set([...UNIVERSE_SP100,...UNIVERSE_TECH,...UNIVERSE_FINANCE,...UNIVERSE_HEALTH,...UNIVERSE_ENERGY,...UNIVERSE_CONSUMER])],
+  industrials: UNIVERSE_INDUSTRIALS,
+  utilities:   UNIVERSE_UTILITIES,
+  materials:   UNIVERSE_MATERIALS,
+  realestate:  UNIVERSE_REALESTATE,
+  comms:       UNIVERSE_COMMS,
+  // Thematic
+  semis:    UNIVERSE_SEMIS,
+  biotech:  UNIVERSE_BIOTECH,
+  smallcap: UNIVERSE_SMALLCAP,
+  mags7:    UNIVERSE_MAGS7,
+  aicloud:  UNIVERSE_AICLOUD,
+  dividend: UNIVERSE_DIVIDEND,
+  // Everything
+  all:      ALL_TICKERS,
 };
 
 // ── Per-tenant cache (5-min TTL) ──────────────────────────────────────────
