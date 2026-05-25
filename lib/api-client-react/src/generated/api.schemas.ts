@@ -306,6 +306,21 @@ export interface ApiKeyInput {
   discordWebhookUrl?: string | null;
 }
 
+export interface Candle {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface ChartData {
+  ticker: string;
+  range: string;
+  candles: Candle[];
+}
+
 export type DashboardSummaryTopTickersItem = {
   ticker: string;
   goCount: number;
@@ -328,6 +343,30 @@ export type ListScanHistoryParams = {
 limit?: number;
 offset?: number;
 };
+
+export type GetChartParams = {
+range?: GetChartRange;
+interval?: GetChartInterval;
+};
+
+export type GetChartRange = typeof GetChartRange[keyof typeof GetChartRange];
+
+
+export const GetChartRange = {
+  '1mo': '1mo',
+  '3mo': '3mo',
+  '6mo': '6mo',
+  '1y': '1y',
+  '2y': '2y',
+} as const;
+
+export type GetChartInterval = typeof GetChartInterval[keyof typeof GetChartInterval];
+
+
+export const GetChartInterval = {
+  '1d': '1d',
+  '1wk': '1wk',
+} as const;
 
 export type ListAuditLogsParams = {
 limit?: number;

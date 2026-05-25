@@ -8,6 +8,8 @@ servers:
   - url: /api
     description: Base API path
 tags:
+  - name: chart
+    description: OHLCV chart data
   - name: health
     description: Health operations
   - name: scan
@@ -289,6 +291,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SectorRotation"
+
+  # ── CHART ─────────────────────────────────────────────────────────────────
+  /chart/{ticker}:
+    get:
+      operationId: getChart
+      tags: [scan]
+      summary: OHLCV candle data for a ticker
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: range
+          in: query
+          schema:
+            type: string
+            enum: [1mo, 3mo, 6mo, 1y, 2y]
+            default: 3mo
+        - name: interval
+          in: query
+          schema:
+            type: string
+            enum: [1d, 1wk]
+            default: 1d
+      responses:
+        "200":
+          description: OHLCV candle data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChartData"
 
   # ── AUDIT LOGS ────────────────────────────────────────────────────────────
   /audit-logs:
@@ -746,6 +780,37 @@ components:
           type: ["string", "null"]
         discordWebhookUrl:
           type: ["string", "null"]
+
+    # ── CHART ─────────────────────────────────────────────────────────────
+    Candle:
+      type: object
+      required: [time, open, high, low, close, volume]
+      properties:
+        time:
+          type: integer
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        close:
+          type: number
+        volume:
+          type: number
+
+    ChartData:
+      type: object
+      required: [ticker, range, candles]
+      properties:
+        ticker:
+          type: string
+        range:
+          type: string
+        candles:
+          type: array
+          items:
+            $ref: "#/components/schemas/Candle"
 
     # ── DASHBOARD ─────────────────────────────────────────────────────────
     DashboardSummary:

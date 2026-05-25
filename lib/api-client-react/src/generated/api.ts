@@ -24,9 +24,11 @@ import type {
   ApiKeyStatus,
   AuditLogList,
   BrokerAccount,
+  ChartData,
   DashboardSummary,
   ExecuteRequest,
   ExecutionResult,
+  GetChartParams,
   HealthStatus,
   ListAuditLogsParams,
   ListScanHistoryParams,
@@ -1168,6 +1170,95 @@ export function useGetSectorRotation<TData = Awaited<ReturnType<typeof getSector
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetSectorRotationQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetChartUrl = (ticker: string,
+    params?: GetChartParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/chart/${ticker}?${stringifiedParams}` : `/api/chart/${ticker}`
+}
+
+/**
+ * @summary OHLCV candle data for a ticker
+ */
+export const getChart = async (ticker: string,
+    params?: GetChartParams, options?: RequestInit): Promise<ChartData> => {
+
+  return customFetch<ChartData>(getGetChartUrl(ticker,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetChartQueryKey = (ticker: string,
+    params?: GetChartParams,) => {
+    return [
+    `/api/chart/${ticker}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetChartQueryOptions = <TData = Awaited<ReturnType<typeof getChart>>, TError = ErrorType<unknown>>(ticker: string,
+    params?: GetChartParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChart>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetChartQueryKey(ticker,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getChart>>> = ({ signal }) => getChart(ticker,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(ticker), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getChart>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetChartQueryResult = NonNullable<Awaited<ReturnType<typeof getChart>>>
+export type GetChartQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary OHLCV candle data for a ticker
+ */
+
+export function useGetChart<TData = Awaited<ReturnType<typeof getChart>>, TError = ErrorType<unknown>>(
+ ticker: string,
+    params?: GetChartParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChart>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetChartQueryOptions(ticker,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

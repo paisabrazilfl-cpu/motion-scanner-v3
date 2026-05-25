@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useRunScan, useListWatchlists } from "@workspace/api-client-react";
 import type { ScanResult, CandidateRecord } from "@workspace/api-client-react";
+import { TickerChart } from "@/components/TickerChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,13 +93,18 @@ function TickerDetail({ c }: { c: CandidateRecord }) {
       </div>
       <div className="text-xs text-muted-foreground">{c.reason}</div>
 
-      <Tabs defaultValue="technical">
+      <Tabs defaultValue="chart">
         <TabsList className="w-full">
+          <TabsTrigger value="chart" className="flex-1">Chart</TabsTrigger>
           <TabsTrigger value="technical" className="flex-1">Technical</TabsTrigger>
           <TabsTrigger value="options" className="flex-1">Options</TabsTrigger>
           <TabsTrigger value="fundamental" className="flex-1">Fundamentals</TabsTrigger>
-          <TabsTrigger value="montecarlo" className="flex-1">Monte Carlo</TabsTrigger>
+          <TabsTrigger value="montecarlo" className="flex-1">MC</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="chart" className="pt-2">
+          <TickerChart ticker={c.ticker} />
+        </TabsContent>
 
         <TabsContent value="technical" className="space-y-3 pt-2">
           <div className="grid grid-cols-2 gap-x-6 gap-y-2">

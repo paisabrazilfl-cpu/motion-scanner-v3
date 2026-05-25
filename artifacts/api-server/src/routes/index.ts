@@ -7,6 +7,7 @@ import brokerRouter from "./broker";
 import sectorRouter from "./sector";
 import auditRouter from "./audit";
 import apikeysRouter from "./apikeys";
+import chartRouter from "./chart";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(brokerRouter);
 router.use(sectorRouter);
 router.use(auditRouter);
 router.use(apikeysRouter);
+router.use(chartRouter);
 
 export default router;

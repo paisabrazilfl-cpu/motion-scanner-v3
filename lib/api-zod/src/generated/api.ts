@@ -347,6 +347,35 @@ export const GetSectorRotationResponse = zod.object({
 
 
 /**
+ * @summary OHLCV candle data for a ticker
+ */
+export const GetChartParams = zod.object({
+  "ticker": zod.coerce.string()
+})
+
+export const getChartQueryRangeDefault = `3mo`;
+export const getChartQueryIntervalDefault = `1d`;
+
+export const GetChartQueryParams = zod.object({
+  "range": zod.enum(['1mo', '3mo', '6mo', '1y', '2y']).default(getChartQueryRangeDefault),
+  "interval": zod.enum(['1d', '1wk']).default(getChartQueryIntervalDefault)
+})
+
+export const GetChartResponse = zod.object({
+  "ticker": zod.string(),
+  "range": zod.string(),
+  "candles": zod.array(zod.object({
+  "time": zod.number(),
+  "open": zod.number(),
+  "high": zod.number(),
+  "low": zod.number(),
+  "close": zod.number(),
+  "volume": zod.number()
+}))
+})
+
+
+/**
  * @summary List SOC 2 audit events for tenant
  */
 export const listAuditLogsQueryLimitDefault = 50;
