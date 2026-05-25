@@ -19,18 +19,48 @@ function StatusDot({ configured }: { configured?: boolean }) {
     : <><XCircle className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Not connected</span></>;
 }
 
+function num(v: unknown, fallback: number): number {
+  const n = parseFloat(String(v ?? ""));
+  return isNaN(n) ? fallback : n;
+}
+
 function ConfigSection({ config }: { config: ScanConfig }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const cfg = config.config as Record<string, unknown>;
+  const raw = config.config as Record<string, unknown>;
+  const tcfg = (raw.technical ?? {}) as Record<string, unknown>;
+  const rsiBand = (tcfg.rsi_band as [number, number]) ?? [30, 85];
 
-  const [rsiOversold, setRsiOversold] = useState(String(cfg.rsiOversold ?? 30));
-  const [rsiOverbought, setRsiOverbought] = useState(String(cfg.rsiOverbought ?? 85));
-  const [adxThreshold, setAdxThreshold] = useState(String(cfg.adxThreshold ?? 25));
-  const [volThreshold, setVolThreshold] = useState(String(cfg.volumeRatioThreshold ?? 1.2));
-  const [monteCarloEnabled, setMonteCarloEnabled] = useState(Boolean(cfg.monteCarloEnabled ?? true));
-  const [discordEnabled, setDiscordEnabled] = useState(Boolean(cfg.discordEnabled ?? false));
-  const [discordWebhook, setDiscordWebhook] = useState(String(cfg.discordWebhook ?? ""));
+  // ── Base thresholds ──────────────────────────────────────────────────────
+  const [rsiOversold, setRsiOversold]     = useState(String(rsiBand[0]));
+  const [rsiOverbought, setRsiOverbought] = useState(String(rsiBand[1]));
+  const [adxThreshold, setAdxThreshold]   = useState(String(tcfg.adx_threshold ?? 25));
+  const [volThreshold, setVolThreshold]   = useState(String(tcfg.volume_ratio_min ?? 1.2));
+  const [emaStackReq, setEmaStackReq]     = useState(Boolean(tcfg.ema_stack_required ?? false));
+
+  // ── EMA 10 ───────────────────────────────────────────────────────────────
+  const [ema10Filter, setEma10Filter] = useState(Boolean(tcfg.ema10_filter ?? false));
+
+  // ── SMA 20 ───────────────────────────────────────────────────────────────
+  const [sma20Filter, setSma20Filter] = useState(Boolean(tcfg.sma20_filter ?? false));
+
+  // ── Full Stochastic ───────────────────────────────────────────────────────
+  const [stochFilter, setStochFilter]         = useState(Boolean(tcfg.stoch_filter ?? false));
+  const [stochKPeriod, setStochKPeriod]       = useState(String(tcfg.stoch_k_period ?? 14));
+  const [stochSlowPeriod, setStochSlowPeriod] = useState(String(tcfg.stoch_slow_period ?? 3));
+  const [stochDPeriod, setStochDPeriod]       = useState(String(tcfg.stoch_d_period ?? 3));
+  const [stochOversold, setStochOversold]     = useState(String(tcfg.stoch_oversold ?? 20));
+  const [stochOverbought, setStochOverbought] = useState(String(tcfg.stoch_overbought ?? 80));
+
+  // ── 3-Month MACD ──────────────────────────────────────────────────────────
+  const [macd3mFilter, setMacd3mFilter]               = useState(Boolean(tcfg.macd3m_filter ?? false));
+  const [macd3mAboveZero, setMacd3mAboveZero]         = useState(Boolean(tcfg.macd3m_require_above_zero ?? false));
+  const [macd3mHistPos, setMacd3mHistPos]             = useState(Boolean(tcfg.macd3m_require_hist_positive ?? false));
+
+  // ── Monte Carlo & Discord ─────────────────────────────────────────────────
+  const [monteCarloEnabled, setMonteCarloEnabled] = useState(Boolean(raw.monte_carlo_enabled ?? true));
+  const [discordEnabled, setDiscordEnabled]       = useState(Boolean(raw.discord_enabled ?? false));
+  const [discordWebhook, setDiscordWebhook]       = useState(String(raw.discord_webhook ?? ""));
 
   const { mutate: update, isPending } = useUpdateConfig({
     mutation: {
@@ -41,28 +71,187 @@ function ConfigSection({ config }: { config: ScanConfig }) {
     },
   });
 
+  function handleSave() {
+    update({
+      data: {
+        config: {
+          ...raw,
+          technical: {
+            ...tcfg,
+            rsi_band: [num(rsiOversold, 30), num(rsiOverbought, 85)],
+            adx_threshold: num(adxThreshold, 25),
+            volume_ratio_min: num(volThreshold, 1.2),
+            ema_stack_required: emaStackReq,
+            ema10_filter: ema10Filter,
+            sma20_filter: sma20Filter,
+            stoch_filter: stochFilter,
+            stoch_k_period: num(stochKPeriod, 14),
+            stoch_slow_period: num(stochSlowPeriod, 3),
+            stoch_d_period: num(stochDPeriod, 3),
+            stoch_oversold: num(stochOversold, 20),
+            stoch_overbought: num(stochOverbought, 80),
+            macd3m_filter: macd3mFilter,
+            macd3m_require_above_zero: macd3mAboveZero,
+            macd3m_require_hist_positive: macd3mHistPos,
+          },
+          monte_carlo_enabled: monteCarloEnabled,
+          discord_enabled: discordEnabled,
+          discord_webhook: discordEnabled ? discordWebhook : "",
+        },
+      },
+    });
+  }
+
   return (
     <Card className="bg-card border-border">
       <CardHeader>
         <CardTitle className="text-sm uppercase tracking-wider">Scan Configuration</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid grid-cols-2 gap-4">
-          {[
-            ["RSI Oversold", rsiOversold, setRsiOversold],
-            ["RSI Overbought", rsiOverbought, setRsiOverbought],
-            ["ADX Threshold", adxThreshold, setAdxThreshold],
-            ["Volume Ratio Min", volThreshold, setVolThreshold],
-          ].map(([label, val, setter]) => (
-            <div key={String(label)} className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground uppercase">{label as string}</Label>
-              <Input value={val as string} onChange={(e) => (setter as (v: string) => void)(e.target.value)} className="font-mono" />
+
+        {/* ── Base thresholds ────────────────────────────────────────────── */}
+        <div>
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Base Thresholds</div>
+          <div className="grid grid-cols-2 gap-4">
+            {([
+              ["RSI Oversold", rsiOversold, setRsiOversold],
+              ["RSI Overbought", rsiOverbought, setRsiOverbought],
+              ["ADX Threshold", adxThreshold, setAdxThreshold],
+              ["RVOL Min", volThreshold, setVolThreshold],
+            ] as [string, string, (v: string) => void][]).map(([label, val, setter]) => (
+              <div key={label} className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground uppercase">{label}</Label>
+                <Input value={val} onChange={(e) => setter(e.target.value)} className="font-mono h-8 text-sm" />
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between mt-4">
+            <div>
+              <div className="text-sm font-medium">Require EMA Stack (9 &gt; 21 &gt; 50)</div>
+              <div className="text-xs text-muted-foreground">HOLD if price is below the EMA stack alignment</div>
             </div>
-          ))}
+            <Switch checked={emaStackReq} onCheckedChange={setEmaStackReq} />
+          </div>
         </div>
 
         <Separator />
 
+        {/* ── EMA 10 ────────────────────────────────────────────────────── */}
+        <div>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold">EMA 10 Filter</div>
+              <div className="text-xs text-muted-foreground">HOLD any ticker where close is below the 10-period EMA</div>
+            </div>
+            <Switch checked={ema10Filter} onCheckedChange={setEma10Filter} />
+          </div>
+          {ema10Filter && (
+            <div className="mt-3 px-3 py-2 rounded bg-muted/20 text-xs text-muted-foreground font-mono">
+              Gate: close &gt; EMA(10) → otherwise HOLD
+            </div>
+          )}
+        </div>
+
+        <Separator />
+
+        {/* ── SMA 20 ────────────────────────────────────────────────────── */}
+        <div>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold">SMA 20 Day Filter</div>
+              <div className="text-xs text-muted-foreground">HOLD any ticker trading below its 20-day simple moving average</div>
+            </div>
+            <Switch checked={sma20Filter} onCheckedChange={setSma20Filter} />
+          </div>
+          {sma20Filter && (
+            <div className="mt-3 px-3 py-2 rounded bg-muted/20 text-xs text-muted-foreground font-mono">
+              Gate: close &gt; SMA(20) → otherwise HOLD
+            </div>
+          )}
+        </div>
+
+        <Separator />
+
+        {/* ── Full Stochastic ────────────────────────────────────────────── */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold">Full Stochastic Filter</div>
+              <div className="text-xs text-muted-foreground">Slow %K/%D — blocks overbought / allows only oversold entries</div>
+            </div>
+            <Switch checked={stochFilter} onCheckedChange={setStochFilter} />
+          </div>
+          {stochFilter && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                {([
+                  ["%K Period", stochKPeriod, setStochKPeriod],
+                  ["Slow %K Period", stochSlowPeriod, setStochSlowPeriod],
+                  ["%D Period", stochDPeriod, setStochDPeriod],
+                ] as [string, string, (v: string) => void][]).map(([label, val, setter]) => (
+                  <div key={label} className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground uppercase">{label}</Label>
+                    <Input value={val} onChange={(e) => setter(e.target.value)} className="font-mono h-8 text-sm" />
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {([
+                  ["Oversold ≤", stochOversold, setStochOversold],
+                  ["Overbought ≥", stochOverbought, setStochOverbought],
+                ] as [string, string, (v: string) => void][]).map(([label, val, setter]) => (
+                  <div key={label} className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground uppercase">{label}</Label>
+                    <Input value={val} onChange={(e) => setter(e.target.value)} className="font-mono h-8 text-sm" />
+                  </div>
+                ))}
+              </div>
+              <div className="px-3 py-2 rounded bg-muted/20 text-xs text-muted-foreground font-mono space-y-0.5">
+                <div>Slow %K({stochKPeriod},{stochSlowPeriod}) outside [{stochOversold},{stochOverbought}] → HOLD</div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <Separator />
+
+        {/* ── 3-Month MACD ──────────────────────────────────────────────── */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold">3-Month MACD Filter</div>
+              <div className="text-xs text-muted-foreground">MACD computed on last ~65 bars (≈3 trading months)</div>
+            </div>
+            <Switch checked={macd3mFilter} onCheckedChange={setMacd3mFilter} />
+          </div>
+          {macd3mFilter && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm">Require MACD Line &gt; 0</div>
+                  <div className="text-xs text-muted-foreground">3M MACD must be above zero (bullish momentum)</div>
+                </div>
+                <Switch checked={macd3mAboveZero} onCheckedChange={setMacd3mAboveZero} />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm">Require Histogram Positive</div>
+                  <div className="text-xs text-muted-foreground">MACD line must be above signal line (accelerating)</div>
+                </div>
+                <Switch checked={macd3mHistPos} onCheckedChange={setMacd3mHistPos} />
+              </div>
+              <div className="px-3 py-2 rounded bg-muted/20 text-xs text-muted-foreground font-mono space-y-0.5">
+                {macd3mAboveZero && <div>3M MACD &gt; 0 → otherwise HOLD</div>}
+                {macd3mHistPos   && <div>3M MACD Hist &gt; 0 → otherwise HOLD</div>}
+                {!macd3mAboveZero && !macd3mHistPos && <div>Filter enabled — select a condition above</div>}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <Separator />
+
+        {/* ── Monte Carlo & Notifications ────────────────────────────────── */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -87,11 +276,7 @@ function ConfigSection({ config }: { config: ScanConfig }) {
           )}
         </div>
 
-        <Button onClick={() => update({ data: { config: {
-          rsiOversold: Number(rsiOversold), rsiOverbought: Number(rsiOverbought),
-          adxThreshold: Number(adxThreshold), volumeRatioThreshold: Number(volThreshold),
-          monteCarloEnabled, discordEnabled, discordWebhook: discordEnabled ? discordWebhook : "",
-        }}})} disabled={isPending} className="w-full">
+        <Button onClick={handleSave} disabled={isPending} className="w-full">
           {isPending ? "Saving..." : "Save Configuration"}
         </Button>
       </CardContent>

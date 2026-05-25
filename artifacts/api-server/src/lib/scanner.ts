@@ -13,7 +13,29 @@ import {
 // ── Default config ───────────────────────────────────────────────────────────
 export const DEFAULT_CONFIG: Record<string, unknown> = {
   universe: { price_min: 1.0, price_max: 2000.0, market_cap_min: 50_000_000, adv_min: 500_000 },
-  technical: { rvol_min: 1.2, atr_pct_min: 0.01, ema_stack_required: false, rsi_band: [30, 85] },
+  technical: {
+    rvol_min: 1.2,
+    atr_pct_min: 0.01,
+    ema_stack_required: false,
+    rsi_band: [30, 85],
+    adx_threshold: 25,
+    volume_ratio_min: 1.2,
+    // EMA 10
+    ema10_filter: false,
+    // SMA 20
+    sma20_filter: false,
+    // Full Stochastic
+    stoch_filter: false,
+    stoch_k_period: 14,
+    stoch_slow_period: 3,
+    stoch_d_period: 3,
+    stoch_oversold: 20,
+    stoch_overbought: 80,
+    // 3-Month MACD
+    macd3m_filter: false,
+    macd3m_require_above_zero: false,
+    macd3m_require_hist_positive: false,
+  },
   fundamental: { earnings_blackout_days: 2 },
   flow_motion: { dollar_volume_min: 1_000_000 },
   indicators: {
@@ -29,6 +51,9 @@ export const DEFAULT_CONFIG: Record<string, unknown> = {
   monte_carlo: { simulations: 500, holding_days: 5, target_R: 2.0 },
   scoring_weights: { technical: 0.25, flow: 0.15, fundamental: 0.10, monte_carlo: 0.20, options: 0.15, sentiment: 0.10, sector: 0.05 },
   notifications: { enabled: false, notify_on: "GO" },
+  monte_carlo_enabled: true,
+  discord_enabled: false,
+  discord_webhook: "",
 };
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -44,17 +69,26 @@ export interface TechData {
   atr: number;
   atr_pct: number;
   ema9: number;
+  ema10: number;
   ema21: number;
   ema50: number;
   ema200: number;
+  sma20: number;
   ema_stack_ok: boolean;
   rsi: number;
   macd: number;
   macdSignal: number;
   macdHist: number;
-  adx: number;
+  // Full Stochastic
   stochK: number;
   stochD: number;
+  stochSlowK: number;
+  stochSlowD: number;
+  // 3-Month MACD
+  macd3m: number;
+  macd3mSignal: number;
+  macd3mHist: number;
+  adx: number;
   breakout: boolean;
   breakout52w: boolean;
   dollar_volume: number;
@@ -114,6 +148,12 @@ function ema(prices: number[], period: number): number {
   return e;
 }
 
+function sma(prices: number[], period: number): number {
+  if (prices.length === 0) return 0;
+  const slice = prices.slice(-period);
+  return slice.reduce((a, b) => a + b, 0) / slice.length;
+}
+
 function rsi(prices: number[], period = 14): number {
   if (prices.length < period + 1) return 50;
   let gains = 0, losses = 0;
@@ -129,7 +169,17 @@ function macd(prices: number[]): { macd: number; signal: number; hist: number } 
   const fast = ema(prices, 12);
   const slow = ema(prices, 26);
   const macdLine = fast - slow;
-  // Approximate signal with last 9 values of macd
+  const signal = macdLine * (2 / 10);
+  return { macd: macdLine, signal, hist: macdLine - signal };
+}
+
+/** 3-month MACD: uses last ~65 bars (≈3 trading months) as the price universe */
+function macd3Month(prices: number[]): { macd: number; signal: number; hist: number } {
+  const bars = prices.slice(-65);
+  if (bars.length < 27) return { macd: 0, signal: 0, hist: 0 };
+  const fast = ema(bars, 12);
+  const slow = ema(bars, 26);
+  const macdLine = fast - slow;
   const signal = macdLine * (2 / 10);
   return { macd: macdLine, signal, hist: macdLine - signal };
 }
@@ -170,15 +220,56 @@ function adx(highs: number[], lows: number[], closes: number[], period = 14): nu
   return Math.abs(diPlus - diMinus) / diSum * 100;
 }
 
+/**
+ * Fast Stochastic (%K, %D).
+ * %K = (close - lowest low over kPeriod) / (highest high - lowest low) * 100
+ * %D = SMA(kPeriod raw %K values, dPeriod)
+ */
 function stochastic(highs: number[], lows: number[], closes: number[], kPeriod = 14, dPeriod = 3): { k: number; d: number } {
-  const slice = closes.slice(-kPeriod);
-  const highSlice = highs.slice(-kPeriod);
-  const lowSlice = lows.slice(-kPeriod);
-  const highestHigh = Math.max(...highSlice);
-  const lowestLow = Math.min(...lowSlice);
-  const range = highestHigh - lowestLow;
-  const k = range > 0 ? ((slice[slice.length - 1] - lowestLow) / range) * 100 : 50;
-  return { k, d: k }; // simplified
+  if (closes.length < kPeriod) return { k: 50, d: 50 };
+  const rawK: number[] = [];
+  for (let i = kPeriod - 1; i < closes.length; i++) {
+    const h = Math.max(...highs.slice(i - kPeriod + 1, i + 1));
+    const l = Math.min(...lows.slice(i - kPeriod + 1, i + 1));
+    const range = h - l;
+    rawK.push(range > 0 ? ((closes[i] - l) / range) * 100 : 50);
+  }
+  const k = rawK[rawK.length - 1];
+  const dSlice = rawK.slice(-dPeriod);
+  const d = dSlice.reduce((a, b) => a + b, 0) / dSlice.length;
+  return { k, d };
+}
+
+/**
+ * Full Stochastic: adds a slow %K smoothing step.
+ * slowK = SMA(fast %K values, slowPeriod)
+ * slowD = SMA(slowK values, dPeriod)
+ */
+function fullStochastic(
+  highs: number[], lows: number[], closes: number[],
+  kPeriod = 14, slowPeriod = 3, dPeriod = 3
+): { fastK: number; slowK: number; slowD: number } {
+  if (closes.length < kPeriod + slowPeriod) return { fastK: 50, slowK: 50, slowD: 50 };
+  const rawK: number[] = [];
+  for (let i = kPeriod - 1; i < closes.length; i++) {
+    const h = Math.max(...highs.slice(i - kPeriod + 1, i + 1));
+    const l = Math.min(...lows.slice(i - kPeriod + 1, i + 1));
+    const range = h - l;
+    rawK.push(range > 0 ? ((closes[i] - l) / range) * 100 : 50);
+  }
+  const fastK = rawK[rawK.length - 1];
+  // Slow %K = SMA of raw %K over slowPeriod
+  const slowKArr: number[] = [];
+  for (let i = slowPeriod - 1; i < rawK.length; i++) {
+    const slice = rawK.slice(i - slowPeriod + 1, i + 1);
+    slowKArr.push(slice.reduce((a, b) => a + b, 0) / slice.length);
+  }
+  if (slowKArr.length === 0) return { fastK, slowK: fastK, slowD: fastK };
+  const slowK = slowKArr[slowKArr.length - 1];
+  // Slow %D = SMA of slow %K over dPeriod
+  const dSlice = slowKArr.slice(-dPeriod);
+  const slowD = dSlice.reduce((a, b) => a + b, 0) / dSlice.length;
+  return { fastK, slowK, slowD };
 }
 
 function isBreakout(closes: number[], period = 20): boolean {
@@ -205,13 +296,20 @@ export async function getTechnical(ticker: string): Promise<TechData> {
     const volume = volumes[volumes.length - 1];
     const prevClose = closes[closes.length - 2] ?? close;
 
-    const e9 = ema(closes, 9), e21 = ema(closes, 21), e50 = ema(closes, 50), e200 = ema(closes, 200);
+    const e9 = ema(closes, 9);
+    const e10 = ema(closes, 10);
+    const e21 = ema(closes, 21);
+    const e50 = ema(closes, 50);
+    const e200 = ema(closes, 200);
+    const s20 = sma(closes, 20);
     const atrVal = atr(highs, lows, closes);
     const rvolVal = rvol(volumes);
     const rsiVal = rsi(closes);
     const macdVals = macd(closes);
+    const macd3mVals = macd3Month(closes);
     const adxVal = adx(highs, lows, closes);
-    const stoch = stochastic(highs, lows, closes);
+    const fastStoch = stochastic(highs, lows, closes);
+    const fullStoch = fullStochastic(highs, lows, closes);
     const dolVol = close * volume;
 
     return {
@@ -219,16 +317,25 @@ export async function getTechnical(ticker: string): Promise<TechData> {
       rvol: parseFloat(rvolVal.toFixed(2)),
       atr: parseFloat(atrVal.toFixed(4)),
       atr_pct: parseFloat((atrVal / close).toFixed(4)),
-      ema9: parseFloat(e9.toFixed(2)), ema21: parseFloat(e21.toFixed(2)),
-      ema50: parseFloat(e50.toFixed(2)), ema200: parseFloat(e200.toFixed(2)),
+      ema9: parseFloat(e9.toFixed(2)),
+      ema10: parseFloat(e10.toFixed(2)),
+      ema21: parseFloat(e21.toFixed(2)),
+      ema50: parseFloat(e50.toFixed(2)),
+      ema200: parseFloat(e200.toFixed(2)),
+      sma20: parseFloat(s20.toFixed(2)),
       ema_stack_ok: close > e9 && e9 > e21 && e21 > e50,
       rsi: parseFloat(rsiVal.toFixed(1)),
       macd: parseFloat(macdVals.macd.toFixed(4)),
       macdSignal: parseFloat(macdVals.signal.toFixed(4)),
       macdHist: parseFloat(macdVals.hist.toFixed(4)),
+      stochK: parseFloat(fastStoch.k.toFixed(1)),
+      stochD: parseFloat(fastStoch.d.toFixed(1)),
+      stochSlowK: parseFloat(fullStoch.slowK.toFixed(1)),
+      stochSlowD: parseFloat(fullStoch.slowD.toFixed(1)),
+      macd3m: parseFloat(macd3mVals.macd.toFixed(4)),
+      macd3mSignal: parseFloat(macd3mVals.signal.toFixed(4)),
+      macd3mHist: parseFloat(macd3mVals.hist.toFixed(4)),
       adx: parseFloat(adxVal.toFixed(1)),
-      stochK: parseFloat(stoch.k.toFixed(1)),
-      stochD: parseFloat(stoch.d.toFixed(1)),
       breakout: isBreakout(closes),
       breakout52w: isBreakout52w(closes),
       dollar_volume: dolVol,
@@ -317,6 +424,38 @@ export function qualify(tech: TechData, fund: FundData, flow: FlowData, cfg: Rec
   const [rsiLo, rsiHi] = (tcfg.rsi_band as [number, number]) ?? [30, 85];
   if (tech.rsi < rsiLo || tech.rsi > rsiHi) {
     return { state: "HOLD", reason: `RSI_OUT_OF_BAND_${tech.rsi.toFixed(1)}` };
+  }
+
+  // ── EMA 10 filter ─────────────────────────────────────────────────────────
+  if (tcfg.ema10_filter && tech.close < tech.ema10) {
+    return { state: "HOLD", reason: `BELOW_EMA10_${tech.ema10.toFixed(2)}` };
+  }
+
+  // ── SMA 20 filter ─────────────────────────────────────────────────────────
+  if (tcfg.sma20_filter && tech.close < tech.sma20) {
+    return { state: "HOLD", reason: `BELOW_SMA20_${tech.sma20.toFixed(2)}` };
+  }
+
+  // ── Full Stochastic filter ────────────────────────────────────────────────
+  if (tcfg.stoch_filter) {
+    const stochOversold = tcfg.stoch_oversold ?? 20;
+    const stochOverbought = tcfg.stoch_overbought ?? 80;
+    if (tech.stochSlowK < stochOversold) {
+      return { state: "HOLD", reason: `STOCH_OVERSOLD_${tech.stochSlowK.toFixed(1)}` };
+    }
+    if (tech.stochSlowK > stochOverbought) {
+      return { state: "HOLD", reason: `STOCH_OVERBOUGHT_${tech.stochSlowK.toFixed(1)}` };
+    }
+  }
+
+  // ── 3-Month MACD filter ───────────────────────────────────────────────────
+  if (tcfg.macd3m_filter) {
+    if (tcfg.macd3m_require_above_zero && tech.macd3m < 0) {
+      return { state: "HOLD", reason: `MACD3M_BELOW_ZERO_${tech.macd3m.toFixed(4)}` };
+    }
+    if (tcfg.macd3m_require_hist_positive && tech.macd3mHist < 0) {
+      return { state: "HOLD", reason: `MACD3M_HIST_NEGATIVE_${tech.macd3mHist.toFixed(4)}` };
+    }
   }
 
   return { state: "GO", reason: "ALL_GATES_PASS" };
