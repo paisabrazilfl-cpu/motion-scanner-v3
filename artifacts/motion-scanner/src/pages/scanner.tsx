@@ -805,11 +805,18 @@ function Screener() {
         {/* Stats bar */}
         {data && !isFetching && (
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <span className="inline-flex items-center gap-1 text-xs border border-blue-500/40 text-blue-400 rounded px-1.5 py-0.5 font-mono">
+              YF
+            </span>
             <span>
               <span className="text-foreground font-semibold">{data.total}</span> match{data.total !== 1 ? "es" : ""}
             </span>
             <span className="text-border">|</span>
-            <span>{data.scanned} scanned</span>
+            <span>
+              {(data as unknown as Record<string, unknown>).validData as number ?? data.scanned} valid
+              <span className="text-border mx-1">/</span>
+              {data.scanned} scanned
+            </span>
             <span className="text-border">|</span>
             <span>cached {new Date(data.cachedAt).toLocaleTimeString()}</span>
             <div className="ml-auto flex gap-2 text-xs">

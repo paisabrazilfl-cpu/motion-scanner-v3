@@ -250,14 +250,22 @@ router.get("/screener", async (req, res): Promise<void> => {
     allRecords = cached!.records;
   }
 
-  // ── Apply user filters ────────────────────────────────────────────────
+  // ── Tier-1 gate: only records with valid Yahoo Finance data ──────────────
   type AnyRec = {
     verdict: string;
     score: number;
+    reason?: string;
     technical?: Record<string, unknown> | null;
   };
 
-  const filtered = (allRecords as AnyRec[]).filter((c) => {
+  const tier1Records = (allRecords as AnyRec[]).filter((c) => {
+    const tech = (c.technical ?? {}) as Record<string, unknown>;
+    // Require Yahoo Finance to have returned a valid OHLCV dataset
+    return tech.ok === true && c.reason !== "SCAN_ERROR";
+  });
+
+  // ── Apply user filters ────────────────────────────────────────────────
+  const filtered = tier1Records.filter((c) => {
     const tech = (c.technical ?? {}) as Record<string, unknown>;
     const price      = tech.price      as number | undefined;
     const rsi        = tech.rsi        as number | undefined;
@@ -301,6 +309,7 @@ router.get("/screener", async (req, res): Promise<void> => {
     results: filtered,
     total: filtered.length,
     scanned: allRecords.length,
+    validData: tier1Records.length,
     cachedAt: entry?.cachedAt.toISOString() ?? new Date().toISOString(),
   });
 });
