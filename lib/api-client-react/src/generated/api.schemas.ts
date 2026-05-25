@@ -66,6 +66,16 @@ export type CandidateRecordOptionsFlow = { [key: string]: unknown } | null;
 /**
  * @nullable
  */
+export type CandidateRecordOptions = { [key: string]: unknown } | null;
+
+/**
+ * @nullable
+ */
+export type CandidateRecordSentiment = { [key: string]: unknown } | null;
+
+/**
+ * @nullable
+ */
 export type CandidateRecordSectorContext = { [key: string]: unknown } | null;
 
 export interface CandidateRecord {
@@ -85,6 +95,10 @@ export interface CandidateRecord {
   indicators?: CandidateRecordIndicators;
   /** @nullable */
   optionsFlow?: CandidateRecordOptionsFlow;
+  /** @nullable */
+  options?: CandidateRecordOptions;
+  /** @nullable */
+  sentiment?: CandidateRecordSentiment;
   /** @nullable */
   sectorContext?: CandidateRecordSectorContext;
 }

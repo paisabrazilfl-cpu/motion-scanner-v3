@@ -9,8 +9,10 @@ import type { CandidateRecordFlow } from './candidateRecordFlow';
 import type { CandidateRecordFundamentals } from './candidateRecordFundamentals';
 import type { CandidateRecordIndicators } from './candidateRecordIndicators';
 import type { CandidateRecordMonteCarlo } from './candidateRecordMonteCarlo';
+import type { CandidateRecordOptions } from './candidateRecordOptions';
 import type { CandidateRecordOptionsFlow } from './candidateRecordOptionsFlow';
 import type { CandidateRecordSectorContext } from './candidateRecordSectorContext';
+import type { CandidateRecordSentiment } from './candidateRecordSentiment';
 import type { CandidateRecordTechnical } from './candidateRecordTechnical';
 import type { CandidateRecordVerdict } from './candidateRecordVerdict';
 
@@ -31,6 +33,10 @@ export interface CandidateRecord {
   indicators?: CandidateRecordIndicators;
   /** @nullable */
   optionsFlow?: CandidateRecordOptionsFlow;
+  /** @nullable */
+  options?: CandidateRecordOptions;
+  /** @nullable */
+  sentiment?: CandidateRecordSentiment;
   /** @nullable */
   sectorContext?: CandidateRecordSectorContext;
 }

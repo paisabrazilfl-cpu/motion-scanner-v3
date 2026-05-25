@@ -44,6 +44,8 @@ export const RunScanResponse = zod.object({
   "monteCarlo": zod.record(zod.string(), zod.unknown()).nullish(),
   "indicators": zod.record(zod.string(), zod.unknown()).nullish(),
   "optionsFlow": zod.record(zod.string(), zod.unknown()).nullish(),
+  "options": zod.record(zod.string(), zod.unknown()).nullish(),
+  "sentiment": zod.record(zod.string(), zod.unknown()).nullish(),
   "sectorContext": zod.record(zod.string(), zod.unknown()).nullish()
 })),
   "hold": zod.array(zod.object({
@@ -57,6 +59,8 @@ export const RunScanResponse = zod.object({
   "monteCarlo": zod.record(zod.string(), zod.unknown()).nullish(),
   "indicators": zod.record(zod.string(), zod.unknown()).nullish(),
   "optionsFlow": zod.record(zod.string(), zod.unknown()).nullish(),
+  "options": zod.record(zod.string(), zod.unknown()).nullish(),
+  "sentiment": zod.record(zod.string(), zod.unknown()).nullish(),
   "sectorContext": zod.record(zod.string(), zod.unknown()).nullish()
 })),
   "rejected": zod.array(zod.object({
@@ -70,6 +74,8 @@ export const RunScanResponse = zod.object({
   "monteCarlo": zod.record(zod.string(), zod.unknown()).nullish(),
   "indicators": zod.record(zod.string(), zod.unknown()).nullish(),
   "optionsFlow": zod.record(zod.string(), zod.unknown()).nullish(),
+  "options": zod.record(zod.string(), zod.unknown()).nullish(),
+  "sentiment": zod.record(zod.string(), zod.unknown()).nullish(),
   "sectorContext": zod.record(zod.string(), zod.unknown()).nullish()
 })),
   "sectorRotation": zod.record(zod.string(), zod.unknown()).nullish(),
@@ -256,6 +262,8 @@ export const ExecuteTradesBody = zod.object({
   "monteCarlo": zod.record(zod.string(), zod.unknown()).nullish(),
   "indicators": zod.record(zod.string(), zod.unknown()).nullish(),
   "optionsFlow": zod.record(zod.string(), zod.unknown()).nullish(),
+  "options": zod.record(zod.string(), zod.unknown()).nullish(),
+  "sentiment": zod.record(zod.string(), zod.unknown()).nullish(),
   "sectorContext": zod.record(zod.string(), zod.unknown()).nullish()
 })),
   "dryRun": zod.boolean().default(executeTradesBodyDryRunDefault),

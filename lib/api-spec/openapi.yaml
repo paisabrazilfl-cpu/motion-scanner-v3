@@ -421,6 +421,12 @@ components:
         optionsFlow:
           type: ["object", "null"]
           additionalProperties: true
+        options:
+          type: ["object", "null"]
+          additionalProperties: true
+        sentiment:
+          type: ["object", "null"]
+          additionalProperties: true
         sectorContext:
           type: ["object", "null"]
           additionalProperties: true

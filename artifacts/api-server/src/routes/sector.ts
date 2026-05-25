@@ -1,5 +1,7 @@
 import { Router } from "express";
-import { getSectorRotation } from "../lib/scanner";
+import { getSectorRotation } from "../lib/sector";
+
+export { getSectorRotation };
 
 const router = Router();
 

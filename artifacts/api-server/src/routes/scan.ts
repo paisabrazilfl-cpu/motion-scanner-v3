@@ -1,14 +1,32 @@
 import { Router } from "express";
-import { db, scanResultsTable } from "@workspace/db";
-import { eq, desc, count, avg, sql } from "drizzle-orm";
+import { db, scanResultsTable, apiKeysTable } from "@workspace/db";
+import { eq, desc, count } from "drizzle-orm";
 import { runScan, DEFAULT_CONFIG } from "../lib/scanner";
+import { decrypt } from "../lib/crypto";
 import { logAudit } from "../lib/audit";
 import {
-  RunScanBody, ListScanHistoryQueryParams, GetScanHistoryParams,
-  GetDashboardSummaryResponse,
+  RunScanBody, ListScanHistoryQueryParams,
 } from "@workspace/api-zod";
+import type { TenantProviderKeys } from "../lib/providers";
 
 const router = Router();
+
+async function getTenantKeys(tenantId: number): Promise<TenantProviderKeys> {
+  try {
+    const rows = await db.select().from(apiKeysTable)
+      .where(eq(apiKeysTable.tenantId, tenantId)).limit(1);
+    const row = rows[0];
+    if (!row) return {};
+    const safeDecrypt = (enc: string | null | undefined): string | undefined => {
+      if (!enc) return undefined;
+      try { return decrypt(enc); } catch { return undefined; }
+    };
+    return {
+      polygonKey: safeDecrypt(row.polygonApiKeyEnc),
+      finnhubKey: safeDecrypt(row.finnhubApiKeyEnc),
+    };
+  } catch { return {}; }
+}
 
 // POST /scan
 router.post("/scan", async (req, res): Promise<void> => {
@@ -17,11 +35,13 @@ router.post("/scan", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { tickers, computeOptions, computeSectors, configOverride } = parsed.data;
-  const cfg = { ...DEFAULT_CONFIG, ...(configOverride ?? {}) };
+  const { tickers, computeOptions: _co, computeSectors, configOverride } = parsed.data;
+  const cfg = configOverride ? { ...DEFAULT_CONFIG, ...configOverride } : DEFAULT_CONFIG;
 
-  req.log.info({ tickers, tenantId: req.tenantId }, "Starting scan");
-  const result = await runScan(tickers, cfg, computeSectors ?? true);
+  const providerKeys = await getTenantKeys(req.tenantId);
+  req.log.info({ tickers, tenantId: req.tenantId, providers: Object.keys(providerKeys).filter((k) => !!(providerKeys as any)[k]) }, "Starting scan");
+
+  const result = await runScan(tickers, cfg, computeSectors ?? false, providerKeys);
 
   const [saved] = await db.insert(scanResultsTable).values({
     tenantId: req.tenantId,
@@ -36,7 +56,7 @@ router.post("/scan", async (req, res): Promise<void> => {
   await logAudit(req, {
     tenantId: req.tenantId, userId: req.userId,
     action: "SCAN_RUN",
-    metadata: { tickerCount: tickers.length, goCount: result.candidates.length },
+    metadata: { tickerCount: tickers.length, goCount: result.candidates.length, providers: result.activeProviders },
   });
 
   res.json({ id: saved.id, timestamp: saved.createdAt.toISOString(), ...result });
@@ -91,7 +111,7 @@ router.get("/scan/history/:id", async (req, res): Promise<void> => {
 router.get("/dashboard/summary", async (req, res): Promise<void> => {
   const rows = await db.select().from(scanResultsTable)
     .where(eq(scanResultsTable.tenantId, req.tenantId))
-    .orderBy(desc(scanResultsTable.createdAt)).limit(5);
+    .orderBy(desc(scanResultsTable.createdAt)).limit(10);
 
   const totalRows = await db.select({ count: count() }).from(scanResultsTable)
     .where(eq(scanResultsTable.tenantId, req.tenantId));
