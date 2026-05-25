@@ -9,6 +9,7 @@ import auditRouter from "./audit";
 import apikeysRouter from "./apikeys";
 import chartRouter from "./chart";
 import newsRouter from "./news";
+import notesRouter from "./notes";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(auditRouter);
 router.use(apikeysRouter);
 router.use(chartRouter);
 router.use(newsRouter);
+router.use(notesRouter);
 
 export default router;

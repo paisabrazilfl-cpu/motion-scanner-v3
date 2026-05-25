@@ -7,7 +7,8 @@ import {
   History, 
   List, 
   ShieldAlert,
-  Newspaper
+  Newspaper,
+  StickyNote
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ const NAV_ITEMS = [
   { href: "/sector", label: "Sector Rotation", icon: BarChart2 },
   { href: "/watchlists", label: "Watchlists", icon: List },
   { href: "/broker", label: "Broker", icon: Briefcase },
+  { href: "/notes", label: "Notes", icon: StickyNote },
   { href: "/news", label: "News", icon: Newspaper },
   { href: "/history", label: "History", icon: History },
   { href: "/audit", label: "Audit Logs", icon: ShieldAlert },

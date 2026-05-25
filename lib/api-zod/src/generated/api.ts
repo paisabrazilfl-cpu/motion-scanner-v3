@@ -347,6 +347,59 @@ export const GetSectorRotationResponse = zod.object({
 
 
 /**
+ * @summary List all notes for the current tenant
+ */
+export const GetNotesResponseItem = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.number(),
+  "title": zod.string(),
+  "content": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const GetNotesResponse = zod.array(GetNotesResponseItem)
+
+
+/**
+ * @summary Create a new note
+ */
+export const CreateNoteBody = zod.object({
+  "title": zod.string().optional(),
+  "content": zod.string().optional()
+})
+
+
+/**
+ * @summary Update a note
+ */
+export const UpdateNoteParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateNoteBody = zod.object({
+  "title": zod.string().optional(),
+  "content": zod.string().optional()
+})
+
+export const UpdateNoteResponse = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.number(),
+  "title": zod.string(),
+  "content": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a note
+ */
+export const DeleteNoteParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
  * @summary Tier-1 financial news feed (global + USA)
  */
 export const getNewsQueryCategoryDefault = `all`;

@@ -306,6 +306,20 @@ export interface ApiKeyInput {
   discordWebhookUrl?: string | null;
 }
 
+export interface Note {
+  id: number;
+  tenantId: number;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NoteInput {
+  title?: string;
+  content?: string;
+}
+
 export type NewsArticleSentiment = typeof NewsArticleSentiment[keyof typeof NewsArticleSentiment];
 
 

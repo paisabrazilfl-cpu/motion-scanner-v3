@@ -292,6 +292,77 @@ paths:
               schema:
                 $ref: "#/components/schemas/SectorRotation"
 
+  # ── NOTES ─────────────────────────────────────────────────────────────────
+  /notes:
+    get:
+      operationId: getNotes
+      tags: [notes]
+      summary: List all notes for the current tenant
+      responses:
+        "200":
+          description: List of notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Note"
+    post:
+      operationId: createNote
+      tags: [notes]
+      summary: Create a new note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NoteInput"
+      responses:
+        "201":
+          description: Created note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+
+  /notes/{id}:
+    put:
+      operationId: updateNote
+      tags: [notes]
+      summary: Update a note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NoteInput"
+      responses:
+        "200":
+          description: Updated note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+    delete:
+      operationId: deleteNote
+      tags: [notes]
+      summary: Delete a note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
   # ── NEWS ──────────────────────────────────────────────────────────────────
   /news:
     get:
@@ -801,6 +872,32 @@ components:
           type: ["string", "null"]
         discordWebhookUrl:
           type: ["string", "null"]
+
+    # ── NOTES ─────────────────────────────────────────────────────────────
+    Note:
+      type: object
+      required: [id, tenantId, title, content, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        tenantId:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    NoteInput:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
 
     # ── NEWS ──────────────────────────────────────────────────────────────
     NewsArticle:
