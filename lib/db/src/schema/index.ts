@@ -5,3 +5,5 @@ export * from "./scan-results";
 export * from "./audit-logs";
 export * from "./api-keys";
 export * from "./notes";
+export * from "./conversations";
+export * from "./messages";

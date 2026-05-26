@@ -11,6 +11,7 @@ import chartRouter from "./chart";
 import newsRouter from "./news";
 import notesRouter from "./notes";
 import screenerRouter from "./screener";
+import openaiRouter from "./openai/index";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(apikeysRouter);
 router.use(chartRouter);
 router.use(newsRouter);
 router.use(notesRouter);
+router.use(openaiRouter);
 
 export default router;

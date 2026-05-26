@@ -16,6 +16,7 @@ import { Settings } from "@/pages/settings";
 import { News } from "@/pages/news";
 import { Notes } from "@/pages/notes";
 import { Charts } from "@/pages/charts";
+import { Agent } from "@/pages/agent";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,6 +42,7 @@ function Router() {
         <Route path="/notes" component={Notes} />
         <Route path="/news" component={News} />
         <Route path="/charts" component={Charts} />
+        <Route path="/agent" component={Agent} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
