@@ -124,6 +124,20 @@ function MarkdownContent({ content }: { content: string }) {
 // ── Suggested prompts ─────────────────────────────────────────────────────────
 
 const SUGGESTIONS = [
+  {
+    label: "Daily equity scan — AMF phase classifier",
+    prompt: `Run a daily Yahoo Finance-based equity scan across these U.S.-listed stocks: AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD, JPM, V, COST, NFLX, ORCL, ADBE, CRM, AVGO, QCOM, TXN, LRCX, AMAT.
+
+Retrieve fresh OHLCV data and calculate each ticker's 52-week low, 52-week high, 52-week range position, SMA20, SMA50, SMA200, RSI, relative volume, support, resistance, and momentum.
+
+Classify each ticker as one of: Downtrend, Accumulation, Reversal, Breakout, Momentum Trend, or No Setup.
+
+Rank only verified candidates by breakout strength, volume confirmation, range-position recovery from the 52-week low, and trend quality.
+
+Output a table with columns: Ticker | Phase | Score | Price | 52W Low | 52W High | Range% | Volume Signal | Resistance | Reason.
+
+Mark stale, missing, or unverifiable data as UNKNOWN. Do not guess.`,
+  },
   { label: "Scan my watchlists for GO signals", prompt: "Load my watchlists and scan them for GO signals. Show me the top opportunities sorted by composite score." },
   { label: "Current sector rotation", prompt: "What is the current sector rotation? Which sectors are leading and which are lagging? What does this suggest about the market regime?" },
   { label: "Oversold large-caps with bullish MACD", prompt: "Scan AAPL, MSFT, GOOGL, AMZN, META, NVDA, TSLA, JPM, V, JNJ for oversold conditions with bullish MACD. Highlight any with RSI below 45 and ADX above 20." },
