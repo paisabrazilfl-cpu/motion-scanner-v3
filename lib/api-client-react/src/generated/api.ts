@@ -20,6 +20,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AmfDiscover400,
+  AmfDiscoverParams,
+  AmfDiscoverResult,
   AmfRequest,
   AmfScanResult,
   ApiKeyInput,
@@ -2485,6 +2488,90 @@ export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDash
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetDashboardSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getAmfDiscoverUrl = (params: AmfDiscoverParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/amf/discover?${stringifiedParams}` : `/api/amf/discover`
+}
+
+/**
+ * @summary Discover tickers from a Yahoo Finance predefined screener
+ */
+export const amfDiscover = async (params: AmfDiscoverParams, options?: RequestInit): Promise<AmfDiscoverResult> => {
+
+  return customFetch<AmfDiscoverResult>(getAmfDiscoverUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAmfDiscoverQueryKey = (params?: AmfDiscoverParams,) => {
+    return [
+    `/api/amf/discover`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getAmfDiscoverQueryOptions = <TData = Awaited<ReturnType<typeof amfDiscover>>, TError = ErrorType<AmfDiscover400>>(params: AmfDiscoverParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof amfDiscover>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAmfDiscoverQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof amfDiscover>>> = ({ signal }) => amfDiscover(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof amfDiscover>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AmfDiscoverQueryResult = NonNullable<Awaited<ReturnType<typeof amfDiscover>>>
+export type AmfDiscoverQueryError = ErrorType<AmfDiscover400>
+
+
+/**
+ * @summary Discover tickers from a Yahoo Finance predefined screener
+ */
+
+export function useAmfDiscover<TData = Awaited<ReturnType<typeof amfDiscover>>, TError = ErrorType<AmfDiscover400>>(
+ params: AmfDiscoverParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof amfDiscover>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAmfDiscoverQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

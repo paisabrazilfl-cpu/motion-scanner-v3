@@ -2,10 +2,10 @@
  * Provider registry — merges data from Yahoo, Polygon, and Finnhub.
  * Each provider is optional; Yahoo is always the baseline.
  */
-export { fetchYahooChart, fetchYahooFundamentals, fetchSpyReturn } from "./yahoo";
+export { fetchYahooChart, fetchYahooFundamentals, fetchSpyReturn, fetchYahooScreener, AMF_SCREENS } from "./yahoo";
 export { fetchPolygonData } from "./polygon";
 export { fetchFinnhubData } from "./finnhub";
-export type { YahooQuoteResult, YahooFundamentals } from "./yahoo";
+export type { YahooQuoteResult, YahooFundamentals, YahooScreenerItem } from "./yahoo";
 export type { PolygonData, PolygonQuote, PolygonOptionsFlow, PolygonNews } from "./polygon";
 export type { FinnhubData, FinnhubQuote, FinnhubSentiment, FinnhubEarnings, FinnhubProfile } from "./finnhub";
 

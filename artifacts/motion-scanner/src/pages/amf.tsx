@@ -1,41 +1,59 @@
 import { useState, useCallback } from "react";
-import { useRunAmfScan } from "@workspace/api-client-react";
+import { useAmfDiscover, useRunAmfScan } from "@workspace/api-client-react";
+import type { AmfDiscoverItem } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
-import { Layers, TrendingUp, TrendingDown, AlertCircle, RefreshCw } from "lucide-react";
+import {
+  Layers, TrendingUp, TrendingDown, AlertCircle, RefreshCw,
+  Search, ChevronRight, X,
+} from "lucide-react";
 
 // ── Phase metadata ────────────────────────────────────────────────────────────
 
 const LTH_PHASES: Record<string, { label: string; color: string; bg: string; order: number }> = {
-  MOMENTUM_TREND: { label: "MOMENTUM TREND",  color: "text-green-400",       bg: "bg-green-400/10 border-green-400/30",   order: 1 },
-  BREAKOUT:       { label: "BREAKOUT",         color: "text-cyan-400",        bg: "bg-cyan-400/10 border-cyan-400/30",     order: 2 },
-  REVERSAL:       { label: "REVERSAL",         color: "text-yellow-400",      bg: "bg-yellow-400/10 border-yellow-400/30", order: 3 },
-  ACCUMULATION:   { label: "ACCUMULATION",     color: "text-amber-400",       bg: "bg-amber-400/10 border-amber-400/30",   order: 4 },
-  DOWNTREND:      { label: "DOWNTREND",        color: "text-red-400",         bg: "bg-red-400/10 border-red-400/30",       order: 5 },
-  NO_SETUP:       { label: "NO SETUP",         color: "text-muted-foreground",bg: "bg-muted/30 border-border",             order: 9 },
-  FILTERED:       { label: "FILTERED",         color: "text-muted-foreground",bg: "bg-muted/30 border-border",             order: 10 },
-  INSUFFICIENT_DATA:{ label: "INSUFF. DATA",   color: "text-muted-foreground",bg: "bg-muted/30 border-border",             order: 11 },
-  NO_DATA:        { label: "NO DATA",          color: "text-destructive",     bg: "bg-destructive/10 border-destructive/30",order: 12 },
-  ERROR:          { label: "ERROR",            color: "text-destructive",     bg: "bg-destructive/10 border-destructive/30",order: 13 },
+  MOMENTUM_TREND:    { label: "MOMENTUM TREND",  color: "text-green-400",        bg: "bg-green-400/10 border-green-400/30",    order: 1 },
+  BREAKOUT:          { label: "BREAKOUT",         color: "text-cyan-400",         bg: "bg-cyan-400/10 border-cyan-400/30",      order: 2 },
+  REVERSAL:          { label: "REVERSAL",         color: "text-yellow-400",       bg: "bg-yellow-400/10 border-yellow-400/30",  order: 3 },
+  ACCUMULATION:      { label: "ACCUMULATION",     color: "text-amber-400",        bg: "bg-amber-400/10 border-amber-400/30",    order: 4 },
+  DOWNTREND:         { label: "DOWNTREND",        color: "text-red-400",          bg: "bg-red-400/10 border-red-400/30",        order: 5 },
+  NO_SETUP:          { label: "NO SETUP",         color: "text-muted-foreground", bg: "bg-muted/30 border-border",              order: 9 },
+  FILTERED:          { label: "FILTERED",         color: "text-muted-foreground", bg: "bg-muted/30 border-border",              order: 10 },
+  INSUFFICIENT_DATA: { label: "INSUFF. DATA",     color: "text-muted-foreground", bg: "bg-muted/30 border-border",              order: 11 },
+  NO_DATA:           { label: "NO DATA",          color: "text-destructive",      bg: "bg-destructive/10 border-destructive/30",order: 12 },
+  ERROR:             { label: "ERROR",            color: "text-destructive",      bg: "bg-destructive/10 border-destructive/30",order: 13 },
 };
 
 const HTL_PHASES: Record<string, { label: string; color: string; bg: string; order: number }> = {
-  BULL_RUN:       { label: "BULL RUN",         color: "text-green-400",       bg: "bg-green-400/10 border-green-400/30",   order: 1 },
-  DISTRIBUTION:   { label: "DISTRIBUTION",     color: "text-yellow-400",      bg: "bg-yellow-400/10 border-yellow-400/30", order: 2 },
-  ROLLOVER:       { label: "ROLLOVER",         color: "text-amber-400",       bg: "bg-amber-400/10 border-amber-400/30",   order: 3 },
-  BREAKDOWN:      { label: "BREAKDOWN",        color: "text-orange-400",      bg: "bg-orange-400/10 border-orange-400/30", order: 4 },
-  BEAR_TREND:     { label: "BEAR TREND",       color: "text-red-400",         bg: "bg-red-400/10 border-red-400/30",       order: 5 },
-  NO_SETUP:       { label: "NO SETUP",         color: "text-muted-foreground",bg: "bg-muted/30 border-border",             order: 9 },
-  FILTERED:       { label: "FILTERED",         color: "text-muted-foreground",bg: "bg-muted/30 border-border",             order: 10 },
-  INSUFFICIENT_DATA:{ label: "INSUFF. DATA",   color: "text-muted-foreground",bg: "bg-muted/30 border-border",             order: 11 },
-  NO_DATA:        { label: "NO DATA",          color: "text-destructive",     bg: "bg-destructive/10 border-destructive/30",order: 12 },
-  ERROR:          { label: "ERROR",            color: "text-destructive",     bg: "bg-destructive/10 border-destructive/30",order: 13 },
+  BULL_RUN:          { label: "BULL RUN",         color: "text-green-400",        bg: "bg-green-400/10 border-green-400/30",    order: 1 },
+  DISTRIBUTION:      { label: "DISTRIBUTION",     color: "text-yellow-400",       bg: "bg-yellow-400/10 border-yellow-400/30",  order: 2 },
+  ROLLOVER:          { label: "ROLLOVER",         color: "text-amber-400",        bg: "bg-amber-400/10 border-amber-400/30",    order: 3 },
+  BREAKDOWN:         { label: "BREAKDOWN",        color: "text-orange-400",       bg: "bg-orange-400/10 border-orange-400/30",  order: 4 },
+  BEAR_TREND:        { label: "BEAR TREND",       color: "text-red-400",          bg: "bg-red-400/10 border-red-400/30",        order: 5 },
+  NO_SETUP:          { label: "NO SETUP",         color: "text-muted-foreground", bg: "bg-muted/30 border-border",              order: 9 },
+  FILTERED:          { label: "FILTERED",         color: "text-muted-foreground", bg: "bg-muted/30 border-border",              order: 10 },
+  INSUFFICIENT_DATA: { label: "INSUFF. DATA",     color: "text-muted-foreground", bg: "bg-muted/30 border-border",              order: 11 },
+  NO_DATA:           { label: "NO DATA",          color: "text-destructive",      bg: "bg-destructive/10 border-destructive/30",order: 12 },
+  ERROR:             { label: "ERROR",            color: "text-destructive",      bg: "bg-destructive/10 border-destructive/30",order: 13 },
 };
 
 const FALLBACK_PHASE = { label: "UNKNOWN", color: "text-muted-foreground", bg: "bg-muted/30 border-border", order: 99 };
+
+// ── Screen presets ────────────────────────────────────────────────────────────
+
+const SCREENS = [
+  { id: "most_actives",             label: "Most Active",          desc: "Highest volume today" },
+  { id: "day_gainers",              label: "Day Gainers",          desc: "Top price movers up" },
+  { id: "day_losers",               label: "Day Losers",           desc: "Top price movers down" },
+  { id: "undervalued_large_caps",   label: "Undervalued L-Cap",    desc: "Large caps, low P/E" },
+  { id: "growth_technology_stocks", label: "Growth Technology",    desc: "High-growth tech names" },
+  { id: "aggressive_small_caps",    label: "Small Cap Growth",     desc: "Small caps, high momentum" },
+  { id: "small_cap_gainers",        label: "Small Cap Gainers",    desc: "Small caps moving up" },
+  { id: "strong_undervalued_stocks",label: "Strong Undervalued",   desc: "Value + strong technicals" },
+];
+
+const COUNT_OPTIONS = [25, 50, 100];
 
 // ── Period presets ────────────────────────────────────────────────────────────
 
@@ -48,9 +66,19 @@ const PRESETS = [
 ];
 
 function approxWeeks(days: number) {
-  const w = Math.round(days / 5) * 5 / 5;
-  if (w >= 52) return `${(w / 52).toFixed(1).replace(".0","").replace(/\.0$/,"")}Y`;
-  return `${Math.round(w)}W`;
+  const w = Math.round(days / 5);
+  if (w >= 52) return `${(w / 52).toFixed(1).replace(/\.0$/, "")}Y`;
+  return `${w}W`;
+}
+
+// ── Market cap formatter ──────────────────────────────────────────────────────
+
+function fmtMcap(n: number | null | undefined): string {
+  if (!n) return "";
+  if (n >= 1e12) return `$${(n / 1e12).toFixed(1)}T`;
+  if (n >= 1e9)  return `$${(n / 1e9).toFixed(0)}B`;
+  if (n >= 1e6)  return `$${(n / 1e6).toFixed(0)}M`;
+  return "";
 }
 
 // ── Range position bar ────────────────────────────────────────────────────────
@@ -96,18 +124,13 @@ function RowCard({
   const pct = (v: number) => `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
 
   return (
-    <div className={cn(
-      "rounded border px-3 py-2.5 space-y-2",
-      meta.bg,
-    )}>
+    <div className={cn("rounded border px-3 py-2.5 space-y-2", meta.bg)}>
       <div className="flex items-center gap-2">
         <span className="font-bold text-sm text-foreground w-16 shrink-0">{ticker}</span>
         <span className={cn("text-xs font-bold tracking-wide", meta.color)}>{meta.label}</span>
         <span className="ml-auto text-xs text-muted-foreground">{score.toFixed(0)}</span>
       </div>
-
       <RangeBar position={rangePosition} />
-
       <div className="grid grid-cols-3 gap-x-2 text-xs">
         <div>
           <div className="text-muted-foreground text-[10px]">PRICE</div>
@@ -140,7 +163,6 @@ function RowCard({
           <div className="font-mono text-foreground">{pct(pctToHigh)}</div>
         </div>
       </div>
-
       {reason && (
         <div className="text-[10px] text-muted-foreground truncate" title={reason}>
           {reason}
@@ -175,32 +197,44 @@ function PhaseSummary({ rows, phaseMap }: {
   );
 }
 
-// ── Default tickers ───────────────────────────────────────────────────────────
-
-const DEFAULT_TICKERS = "AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD, SPY, QQQ";
-
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function Amf() {
-  const [tickerInput, setTickerInput] = useState(DEFAULT_TICKERS);
+  const [selectedScreen, setSelectedScreen] = useState("most_actives");
+  const [count, setCount]   = useState(50);
   const [period, setPeriod] = useState(252);
+  const [discoveredTickers, setDiscoveredTickers] = useState<string[]>([]);
+  const [discoveredItems, setDiscoveredItems] = useState<AmfDiscoverItem[]>([]);
   const [hasScanned, setHasScanned] = useState(false);
+
+  const discover = useAmfDiscover(
+    { screen: selectedScreen, count },
+    { query: { enabled: false, queryKey: ["amf-discover", selectedScreen, count] } },
+  );
 
   const { mutate, isPending, data, error } = useRunAmfScan();
 
+  const handleDiscover = useCallback(async () => {
+    const result = await discover.refetch();
+    if (result.data) {
+      setDiscoveredTickers(result.data.tickers);
+      setDiscoveredItems(result.data.items ?? []);
+      setHasScanned(false);
+    }
+  }, [discover]);
+
   const handleScan = useCallback(() => {
-    const tickers = tickerInput
-      .split(/[\s,\n]+/)
-      .map((t) => t.trim().toUpperCase())
-      .filter(Boolean);
-    if (!tickers.length) return;
+    if (!discoveredTickers.length) return;
     setHasScanned(true);
-    mutate({ data: { tickers, period } });
-  }, [tickerInput, period, mutate]);
+    mutate({ data: { tickers: discoveredTickers, period } });
+  }, [discoveredTickers, period, mutate]);
+
+  const removeTicker = useCallback((sym: string) => {
+    setDiscoveredTickers((prev) => prev.filter((t) => t !== sym));
+    setDiscoveredItems((prev) => prev.filter((i) => i.symbol !== sym));
+  }, []);
 
   const results = data?.results ?? [];
-
-  // Sort each panel by score desc, filtered for actionable phases
   const ACTIONABLE_LTH = new Set(["MOMENTUM_TREND", "BREAKOUT", "REVERSAL", "ACCUMULATION", "DOWNTREND"]);
   const ACTIONABLE_HTL = new Set(["BULL_RUN", "DISTRIBUTION", "ROLLOVER", "BREAKDOWN", "BEAR_TREND"]);
 
@@ -219,8 +253,9 @@ export function Amf() {
   const lthActionable = lthRows.filter((r) => ACTIONABLE_LTH.has(r.phase));
   const htlActionable = htlRows.filter((r) => ACTIONABLE_HTL.has(r.mirrorPhase));
 
-  const weeks = approxWeeks(period);
+  const weeks     = approxWeeks(period);
   const exactWeeks = Math.round(period / 5);
+  const screenLabel = SCREENS.find((s) => s.id === selectedScreen)?.label ?? selectedScreen;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -238,29 +273,61 @@ export function Amf() {
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="border-b border-border px-6 py-4 shrink-0 space-y-4">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-end">
+      {/* Setup panel */}
+      <div className="border-b border-border px-6 py-4 shrink-0 space-y-5">
 
-          {/* Tickers */}
-          <div className="space-y-1.5">
+        {/* Screen selector */}
+        <div className="space-y-2">
+          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+            SCREEN — Yahoo Finance Live Feed
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+            {SCREENS.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => { setSelectedScreen(s.id); setDiscoveredTickers([]); setDiscoveredItems([]); }}
+                className={cn(
+                  "text-left px-2.5 py-2 rounded border text-xs transition-colors",
+                  selectedScreen === s.id
+                    ? "bg-cyan-400/10 border-cyan-400/40 text-cyan-300"
+                    : "border-border text-muted-foreground hover:border-cyan-400/30 hover:text-foreground"
+                )}
+              >
+                <div className="font-semibold leading-tight">{s.label}</div>
+                <div className="text-[10px] opacity-60 mt-0.5 leading-tight">{s.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Count + Period row */}
+        <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-5 items-end">
+
+          {/* Count */}
+          <div className="space-y-2">
             <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-              TICKERS <span className="text-border normal-case">(comma or space separated)</span>
+              TICKER COUNT
             </label>
-            <Textarea
-              value={tickerInput}
-              onChange={(e) => setTickerInput(e.target.value)}
-              placeholder="AAPL, MSFT, NVDA, TSLA..."
-              rows={2}
-              className="font-mono text-xs resize-none bg-card border-border text-foreground"
-              onKeyDown={(e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === "Enter") handleScan();
-              }}
-            />
+            <div className="flex gap-1">
+              {COUNT_OPTIONS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setCount(c)}
+                  className={cn(
+                    "px-4 py-1.5 rounded border text-xs font-mono transition-colors",
+                    count === c
+                      ? "bg-cyan-400/15 border-cyan-400/40 text-cyan-400 font-bold"
+                      : "border-border text-muted-foreground hover:border-cyan-400/30 hover:text-foreground"
+                  )}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Period */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                 LOOKBACK PERIOD
@@ -269,7 +336,6 @@ export function Amf() {
                 {period}d <span className="text-muted-foreground font-normal">≈ {exactWeeks}W</span>
               </span>
             </div>
-
             <Slider
               value={[period]}
               onValueChange={([v]) => setPeriod(v)}
@@ -278,7 +344,6 @@ export function Amf() {
               step={21}
               className="w-full"
             />
-
             <div className="flex gap-1">
               {PRESETS.map((p) => (
                 <button
@@ -298,18 +363,76 @@ export function Amf() {
           </div>
         </div>
 
-        <Button
-          onClick={handleScan}
-          disabled={isPending}
-          size="sm"
-          className="font-mono text-xs gap-2"
-        >
-          {isPending ? (
-            <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> SCANNING…</>
-          ) : (
-            <><Layers className="h-3.5 w-3.5" /> RUN A.M.F. SCAN</>
+        {/* Action row */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <Button
+            onClick={handleDiscover}
+            disabled={discover.isFetching}
+            variant="outline"
+            size="sm"
+            className="font-mono text-xs gap-2 border-cyan-400/40 text-cyan-300 hover:bg-cyan-400/10"
+          >
+            {discover.isFetching
+              ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> FETCHING…</>
+              : <><Search className="h-3.5 w-3.5" /> DISCOVER TICKERS</>
+            }
+          </Button>
+
+          {discoveredTickers.length > 0 && (
+            <Button
+              onClick={handleScan}
+              disabled={isPending}
+              size="sm"
+              className="font-mono text-xs gap-2"
+            >
+              {isPending
+                ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> SCANNING…</>
+                : <><Layers className="h-3.5 w-3.5" /> RUN A.M.F. SCAN ({discoveredTickers.length})</>
+              }
+            </Button>
           )}
-        </Button>
+
+          {discover.isError && (
+            <span className="flex items-center gap-1.5 text-xs text-destructive">
+              <AlertCircle className="h-3.5 w-3.5" />
+              Failed to fetch screen
+            </span>
+          )}
+        </div>
+
+        {/* Discovered tickers chips */}
+        {discoveredTickers.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                {discoveredTickers.length} TICKERS — {screenLabel}
+              </span>
+              <ChevronRight className="h-3 w-3 text-muted-foreground" />
+              <span className="text-[10px] text-muted-foreground">Click × to remove before scanning</span>
+            </div>
+            <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto pr-1">
+              {discoveredItems.map((item) => (
+                <span
+                  key={item.symbol}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-border bg-card text-[10px] font-mono group hover:border-destructive/40 transition-colors"
+                >
+                  <span className="font-bold text-foreground">{item.symbol}</span>
+                  <span className="text-muted-foreground">${item.regularMarketPrice.toFixed(2)}</span>
+                  {item.marketCap && (
+                    <span className="text-muted-foreground/60">{fmtMcap(item.marketCap)}</span>
+                  )}
+                  <button
+                    onClick={() => removeTicker(item.symbol)}
+                    className="ml-0.5 text-muted-foreground/40 hover:text-destructive transition-colors"
+                    title={`Remove ${item.symbol}`}
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Error */}
@@ -320,21 +443,38 @@ export function Amf() {
         </div>
       )}
 
-      {/* Results */}
-      {!hasScanned && !isPending ? (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-xs">
-          Enter tickers and press <kbd className="mx-1 px-1.5 py-0.5 border border-border rounded text-[10px]">RUN A.M.F. SCAN</kbd> to classify phases
+      {/* Empty state */}
+      {!hasScanned && !isPending && discoveredTickers.length === 0 && (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-6">
+          <div className="w-10 h-10 rounded-full bg-cyan-400/10 flex items-center justify-center">
+            <Layers className="h-5 w-5 text-cyan-400" />
+          </div>
+          <div>
+            <p className="text-sm font-medium">Select a screen and discover tickers</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Yahoo Finance feeds live U.S. equity tickers · No manual entry required
+            </p>
+          </div>
+          <button
+            onClick={handleDiscover}
+            disabled={discover.isFetching}
+            className="text-xs text-cyan-400 underline underline-offset-2 hover:no-underline disabled:opacity-50"
+          >
+            {discover.isFetching ? "Fetching…" : `Discover ${count} tickers from "${screenLabel}"`}
+          </button>
         </div>
-      ) : isPending ? (
+      )}
+
+      {/* Scanning spinner */}
+      {isPending && (
         <div className="flex-1 flex items-center justify-center gap-2 text-muted-foreground text-xs">
           <RefreshCw className="h-4 w-4 animate-spin text-cyan-400" />
-          Fetching OHLCV data and classifying phases…
+          Fetching OHLCV data and classifying {discoveredTickers.length} tickers…
         </div>
-      ) : results.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-xs">
-          No results returned.
-        </div>
-      ) : (
+      )}
+
+      {/* Results */}
+      {hasScanned && !isPending && results.length > 0 && (
         <div className="flex-1 overflow-hidden">
           <div className="h-full grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-border">
 
@@ -347,7 +487,7 @@ export function Amf() {
                   <span className="ml-auto text-[10px] text-muted-foreground">{lthActionable.length} actionable</span>
                 </div>
                 <div className="text-[10px] text-muted-foreground mb-2">
-                  Phase journey: DOWNTREND → ACCUMULATION → REVERSAL → BREAKOUT → MOMENTUM TREND
+                  DOWNTREND → ACCUMULATION → REVERSAL → BREAKOUT → MOMENTUM TREND
                 </div>
                 <PhaseSummary rows={lthRows} phaseMap={LTH_PHASES} />
               </div>
@@ -379,11 +519,13 @@ export function Amf() {
               <div className="border-b border-border px-4 py-2.5 shrink-0">
                 <div className="flex items-center gap-2 mb-2">
                   <TrendingDown className="h-3.5 w-3.5 text-red-400" />
-                  <span className="text-xs font-bold text-foreground tracking-wide">HIGH → LOW <span className="text-muted-foreground font-normal">(MIRROR)</span></span>
+                  <span className="text-xs font-bold text-foreground tracking-wide">
+                    HIGH → LOW <span className="text-muted-foreground font-normal">(MIRROR)</span>
+                  </span>
                   <span className="ml-auto text-[10px] text-muted-foreground">{htlActionable.length} actionable</span>
                 </div>
                 <div className="text-[10px] text-muted-foreground mb-2">
-                  Mirror journey: BULL RUN → DISTRIBUTION → ROLLOVER → BREAKDOWN → BEAR TREND
+                  BULL RUN → DISTRIBUTION → ROLLOVER → BREAKDOWN → BEAR TREND
                 </div>
                 <PhaseSummary rows={htlRows.map((r) => ({ phase: r.mirrorPhase }))} phaseMap={HTL_PHASES} />
               </div>
@@ -411,6 +553,12 @@ export function Amf() {
             </div>
 
           </div>
+        </div>
+      )}
+
+      {hasScanned && !isPending && results.length === 0 && (
+        <div className="flex-1 flex items-center justify-center text-muted-foreground text-xs">
+          No results returned.
         </div>
       )}
     </div>

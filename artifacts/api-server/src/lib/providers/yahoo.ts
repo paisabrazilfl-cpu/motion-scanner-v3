@@ -74,6 +74,50 @@ export async function fetchYahooFundamentals(ticker: string): Promise<YahooFunda
   } catch { return null; }
 }
 
+export interface YahooScreenerItem {
+  symbol: string;
+  shortName: string;
+  regularMarketPrice: number;
+  marketCap: number | null;
+  exchange: string;
+  sector: string | null;
+}
+
+export const AMF_SCREENS: Record<string, string> = {
+  most_actives:            "Most Active",
+  day_gainers:             "Day Gainers",
+  day_losers:              "Day Losers",
+  undervalued_large_caps:  "Undervalued Large Caps",
+  growth_technology_stocks:"Growth Technology",
+  aggressive_small_caps:   "Aggressive Small Caps",
+  small_cap_gainers:       "Small Cap Gainers",
+  strong_undervalued_stocks:"Strong Undervalued",
+};
+
+export async function fetchYahooScreener(
+  screenId: string,
+  count = 50,
+): Promise<YahooScreenerItem[]> {
+  try {
+    const url =
+      `https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved` +
+      `?formatted=false&scrIds=${encodeURIComponent(screenId)}&count=${count}&start=0&region=US&lang=en-US`;
+    const { data } = await axios.get(url, { timeout: 20000, headers: YF_HEADERS });
+    const quotes: Record<string, unknown>[] =
+      data?.finance?.result?.[0]?.quotes ?? [];
+    return quotes
+      .filter((q) => q.symbol && typeof q.regularMarketPrice === "number")
+      .map((q) => ({
+        symbol:              String(q.symbol),
+        shortName:           String(q.shortName ?? q.longName ?? q.symbol),
+        regularMarketPrice:  q.regularMarketPrice as number,
+        marketCap:           typeof q.marketCap === "number" ? q.marketCap : null,
+        exchange:            String(q.exchange ?? q.fullExchangeName ?? ""),
+        sector:              typeof q.sector === "string" ? q.sector : null,
+      }));
+  } catch { return []; }
+}
+
 export async function fetchSpyReturn(days = 5): Promise<number> {
   try {
     const chart = await fetchYahooChart("SPY", "1mo");

@@ -680,6 +680,35 @@ export const GetDashboardSummaryResponse = zod.object({
 
 
 /**
+ * @summary Discover tickers from a Yahoo Finance predefined screener
+ */
+export const amfDiscoverQueryCountDefault = 50;
+export const amfDiscoverQueryCountMin = 10;
+export const amfDiscoverQueryCountMax = 100;
+
+
+
+export const AmfDiscoverQueryParams = zod.object({
+  "screen": zod.coerce.string().describe('Yahoo Finance predefined screener ID (e.g. most_actives, day_gainers)'),
+  "count": zod.coerce.number().min(amfDiscoverQueryCountMin).max(amfDiscoverQueryCountMax).default(amfDiscoverQueryCountDefault).describe('Number of tickers to return')
+})
+
+export const AmfDiscoverResponse = zod.object({
+  "tickers": zod.array(zod.string()),
+  "items": zod.array(zod.object({
+  "symbol": zod.string(),
+  "shortName": zod.string(),
+  "regularMarketPrice": zod.number(),
+  "marketCap": zod.number().nullish(),
+  "exchange": zod.string(),
+  "sector": zod.string().nullish()
+})),
+  "screen": zod.string(),
+  "count": zod.number()
+})
+
+
+/**
  * @summary Run A.M.F. scanner — classify tickers into 52-period range phases (Low→High + mirror)
  */
 export const runAmfScanBodyTickersMax = 60;

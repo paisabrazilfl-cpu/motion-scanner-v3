@@ -466,6 +466,24 @@ export interface AmfScanResult {
   scannedAt: string;
 }
 
+export interface AmfDiscoverItem {
+  symbol: string;
+  shortName: string;
+  regularMarketPrice: number;
+  /** @nullable */
+  marketCap?: number | null;
+  exchange: string;
+  /** @nullable */
+  sector?: string | null;
+}
+
+export interface AmfDiscoverResult {
+  tickers: string[];
+  items: AmfDiscoverItem[];
+  screen: string;
+  count: number;
+}
+
 export type ListScanHistoryParams = {
 limit?: number;
 offset?: number;
@@ -568,6 +586,23 @@ export const GetChartInterval = {
 export type ListAuditLogsParams = {
 limit?: number;
 offset?: number;
+};
+
+export type AmfDiscoverParams = {
+/**
+ * Yahoo Finance predefined screener ID (e.g. most_actives, day_gainers)
+ */
+screen: string;
+/**
+ * Number of tickers to return
+ * @minimum 10
+ * @maximum 100
+ */
+count?: number;
+};
+
+export type AmfDiscover400 = {
+  error: string;
 };
 
 export type RunAmfScan400 = {

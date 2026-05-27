@@ -676,6 +676,45 @@ paths:
                 $ref: "#/components/schemas/DashboardSummary"
 
   # ── AMF ───────────────────────────────────────────────────────────────────────
+  /amf/discover:
+    get:
+      operationId: amfDiscover
+      tags: [amf]
+      summary: Discover tickers from a Yahoo Finance predefined screener
+      parameters:
+        - name: screen
+          in: query
+          required: true
+          schema:
+            type: string
+          description: "Yahoo Finance predefined screener ID (e.g. most_actives, day_gainers)"
+        - name: count
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+            minimum: 10
+            maximum: 100
+          description: Number of tickers to return
+      responses:
+        "200":
+          description: Discovered tickers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AmfDiscoverResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
+
   /amf:
     post:
       operationId: runAmfScan
@@ -1392,3 +1431,37 @@ components:
         scannedAt:
           type: string
           format: date-time
+
+    AmfDiscoverItem:
+      type: object
+      required: [symbol, shortName, regularMarketPrice, exchange]
+      properties:
+        symbol:
+          type: string
+        shortName:
+          type: string
+        regularMarketPrice:
+          type: number
+        marketCap:
+          type: ["number", "null"]
+        exchange:
+          type: string
+        sector:
+          type: ["string", "null"]
+
+    AmfDiscoverResult:
+      type: object
+      required: [tickers, items, screen, count]
+      properties:
+        tickers:
+          type: array
+          items:
+            type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AmfDiscoverItem"
+        screen:
+          type: string
+        count:
+          type: integer
