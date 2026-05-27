@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "7nDFAnOhZRudnHRG3JP7x"
+uri = "file://artifacts/motion-scanner-mobile/assets/images/icon.png"
+type = "image"
+title = "motion scanner mobile icon"

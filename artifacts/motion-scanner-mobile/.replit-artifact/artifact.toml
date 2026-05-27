@@ -1,0 +1,22 @@
+kind = "mobile"
+previewPath = "/mobile/"
+title = "Motion Scanner Mobile"
+version = "1.0.0"
+id = "artifacts/motion-scanner-mobile"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+name = "expo"
+paths = [ "/mobile/" ]
+localPort = 8081
+
+[services.development]
+run = "pnpm --filter @workspace/motion-scanner-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/motion-scanner-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/motion-scanner-mobile", "run", "serve" ]
