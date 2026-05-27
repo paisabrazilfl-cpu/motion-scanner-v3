@@ -28,6 +28,8 @@ tags:
     description: Audit logs
   - name: apikeys
     description: Tenant API key management
+  - name: amf
+    description: A.M.F. 52-period range phase scanner (Low→High + High→Low mirror)
 paths:
   /openai/conversations:
     get:
@@ -673,6 +675,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardSummary"
 
+  # ── AMF ───────────────────────────────────────────────────────────────────────
+  /amf:
+    post:
+      operationId: runAmfScan
+      tags: [amf]
+      summary: Run A.M.F. scanner — classify tickers into 52-period range phases (Low→High + mirror)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AmfRequest"
+      responses:
+        "200":
+          description: A.M.F. scan results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AmfScanResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
+
 components:
   schemas:
     HealthStatus:
@@ -1270,3 +1302,93 @@ components:
                 type: integer
               avgScore:
                 type: number
+
+    # ── AMF ───────────────────────────────────────────────────────────────
+    AmfRequest:
+      type: object
+      required: [tickers]
+      properties:
+        tickers:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 60
+        period:
+          type: integer
+          default: 252
+          minimum: 63
+          maximum: 756
+          description: Lookback window in trading days (252 = 52 weeks)
+
+    AmfRow:
+      type: object
+      required:
+        - ticker
+        - phase
+        - score
+        - mirrorPhase
+        - mirrorScore
+        - close
+        - periodLow
+        - periodHigh
+        - rangePosition
+        - pctFromLow
+        - pctToHigh
+        - rsi14
+        - roc20
+        - roc63
+        - relVol20
+        - reason
+        - mirrorReason
+      properties:
+        ticker:
+          type: string
+        phase:
+          type: string
+        score:
+          type: number
+        mirrorPhase:
+          type: string
+        mirrorScore:
+          type: number
+        close:
+          type: number
+        periodLow:
+          type: number
+        periodHigh:
+          type: number
+        rangePosition:
+          type: number
+        pctFromLow:
+          type: number
+        pctToHigh:
+          type: number
+        rsi14:
+          type: number
+        roc20:
+          type: number
+        roc63:
+          type: number
+        relVol20:
+          type: number
+        reason:
+          type: string
+        mirrorReason:
+          type: string
+        error:
+          type: ["string", "null"]
+
+    AmfScanResult:
+      type: object
+      required: [results, period, scannedAt]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/AmfRow"
+        period:
+          type: integer
+        scannedAt:
+          type: string
+          format: date-time

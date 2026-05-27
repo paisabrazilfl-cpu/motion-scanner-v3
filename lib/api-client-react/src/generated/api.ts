@@ -20,6 +20,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AmfRequest,
+  AmfScanResult,
   ApiKeyInput,
   ApiKeyStatus,
   AuditLogList,
@@ -43,6 +45,7 @@ import type {
   OpenaiMessage,
   OpenaiMessageInput,
   Position,
+  RunAmfScan400,
   RunScreenerParams,
   ScanConfig,
   ScanConfigInput,
@@ -2493,4 +2496,75 @@ export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDash
 
 
 
+
+export const getRunAmfScanUrl = () => {
+
+
+
+
+  return `/api/amf`
+}
+
+/**
+ * @summary Run A.M.F. scanner — classify tickers into 52-period range phases (Low→High + mirror)
+ */
+export const runAmfScan = async (amfRequest: AmfRequest, options?: RequestInit): Promise<AmfScanResult> => {
+
+  return customFetch<AmfScanResult>(getRunAmfScanUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      amfRequest,)
+  }
+);}
+
+
+
+
+export const getRunAmfScanMutationOptions = <TError = ErrorType<RunAmfScan400>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runAmfScan>>, TError,{data: BodyType<AmfRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runAmfScan>>, TError,{data: BodyType<AmfRequest>}, TContext> => {
+
+const mutationKey = ['runAmfScan'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runAmfScan>>, {data: BodyType<AmfRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  runAmfScan(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunAmfScanMutationResult = NonNullable<Awaited<ReturnType<typeof runAmfScan>>>
+    export type RunAmfScanMutationBody = BodyType<AmfRequest>
+    export type RunAmfScanMutationError = ErrorType<RunAmfScan400>
+
+    /**
+ * @summary Run A.M.F. scanner — classify tickers into 52-period range phases (Low→High + mirror)
+ */
+export const useRunAmfScan = <TError = ErrorType<RunAmfScan400>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runAmfScan>>, TError,{data: BodyType<AmfRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runAmfScan>>,
+        TError,
+        {data: BodyType<AmfRequest>},
+        TContext
+      > => {
+      return useMutation(getRunAmfScanMutationOptions(options));
+    }
 

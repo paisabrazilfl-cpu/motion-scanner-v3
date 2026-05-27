@@ -13,6 +13,7 @@ import {
   CandlestickChart,
   Bot,
   LogOut,
+  Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +22,7 @@ const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: Activity },
   { href: "/scanner", label: "Stock Finder", icon: BarChart2 },
+  { href: "/amf", label: "A.M.F.", icon: Layers },
   { href: "/charts", label: "Charts", icon: CandlestickChart },
   { href: "/agent", label: "Agent", icon: Bot },
   { href: "/sector", label: "Sector Rotation", icon: BarChart2 },

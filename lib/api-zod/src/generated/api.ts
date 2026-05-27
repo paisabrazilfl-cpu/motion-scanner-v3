@@ -679,3 +679,45 @@ export const GetDashboardSummaryResponse = zod.object({
 })
 
 
+/**
+ * @summary Run A.M.F. scanner — classify tickers into 52-period range phases (Low→High + mirror)
+ */
+export const runAmfScanBodyTickersMax = 60;
+
+export const runAmfScanBodyPeriodDefault = 252;
+export const runAmfScanBodyPeriodMin = 63;
+export const runAmfScanBodyPeriodMax = 756;
+
+
+
+export const RunAmfScanBody = zod.object({
+  "tickers": zod.array(zod.string()).min(1).max(runAmfScanBodyTickersMax),
+  "period": zod.number().min(runAmfScanBodyPeriodMin).max(runAmfScanBodyPeriodMax).default(runAmfScanBodyPeriodDefault).describe('Lookback window in trading days (252 = 52 weeks)')
+})
+
+export const RunAmfScanResponse = zod.object({
+  "results": zod.array(zod.object({
+  "ticker": zod.string(),
+  "phase": zod.string(),
+  "score": zod.number(),
+  "mirrorPhase": zod.string(),
+  "mirrorScore": zod.number(),
+  "close": zod.number(),
+  "periodLow": zod.number(),
+  "periodHigh": zod.number(),
+  "rangePosition": zod.number(),
+  "pctFromLow": zod.number(),
+  "pctToHigh": zod.number(),
+  "rsi14": zod.number(),
+  "roc20": zod.number(),
+  "roc63": zod.number(),
+  "relVol20": zod.number(),
+  "reason": zod.string(),
+  "mirrorReason": zod.string(),
+  "error": zod.string().nullish()
+})),
+  "period": zod.number(),
+  "scannedAt": zod.coerce.date()
+})
+
+

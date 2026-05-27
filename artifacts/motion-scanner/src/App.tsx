@@ -21,6 +21,7 @@ import { News } from "@/pages/news";
 import { Notes } from "@/pages/notes";
 import { Charts } from "@/pages/charts";
 import { Agent } from "@/pages/agent";
+import { Amf } from "@/pages/amf";
 import NotFound from "@/pages/not-found";
 
 // ── QueryClient singleton ─────────────────────────────────────────────────────
@@ -279,6 +280,7 @@ function AppRoutes() {
                 <Route path="/news" component={News} />
                 <Route path="/charts" component={Charts} />
                 <Route path="/agent" component={Agent} />
+                <Route path="/amf" component={Amf} />
                 <Route component={NotFound} />
               </Switch>
             </Layout>

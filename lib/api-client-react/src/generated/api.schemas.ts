@@ -424,6 +424,48 @@ export interface DashboardSummary {
   topTickers?: DashboardSummaryTopTickersItem[];
 }
 
+export interface AmfRequest {
+  /**
+     * @minItems 1
+     * @maxItems 60
+     */
+  tickers: string[];
+  /**
+     * Lookback window in trading days (252 = 52 weeks)
+     * @minimum 63
+     * @maximum 756
+     */
+  period?: number;
+}
+
+export interface AmfRow {
+  ticker: string;
+  phase: string;
+  score: number;
+  mirrorPhase: string;
+  mirrorScore: number;
+  close: number;
+  periodLow: number;
+  periodHigh: number;
+  rangePosition: number;
+  pctFromLow: number;
+  pctToHigh: number;
+  rsi14: number;
+  roc20: number;
+  roc63: number;
+  relVol20: number;
+  reason: string;
+  mirrorReason: string;
+  /** @nullable */
+  error?: string | null;
+}
+
+export interface AmfScanResult {
+  results: AmfRow[];
+  period: number;
+  scannedAt: string;
+}
+
 export type ListScanHistoryParams = {
 limit?: number;
 offset?: number;
@@ -526,5 +568,9 @@ export const GetChartInterval = {
 export type ListAuditLogsParams = {
 limit?: number;
 offset?: number;
+};
+
+export type RunAmfScan400 = {
+  error: string;
 };
 
