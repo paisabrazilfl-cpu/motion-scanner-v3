@@ -1,0 +1,13 @@
+.git
+.github
+.agents
+.local
+node_modules
+**/node_modules
+**/dist
+**/.tsbuildinfo
+artifacts/motion-scanner-mobile
+artifacts/mockup-sandbox
+**/*.log
+.env
+.env.*

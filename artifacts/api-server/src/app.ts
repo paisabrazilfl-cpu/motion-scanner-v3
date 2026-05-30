@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import path from "path";
 import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import {
@@ -51,5 +52,14 @@ app.use(
 );
 
 app.use("/api", tenantMiddleware, router);
+
+// ── Production: serve built frontend static files ─────────────────────────
+const frontendDist = process.env.FRONTEND_DIST;
+if (frontendDist) {
+  app.use(express.static(frontendDist));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(frontendDist, "index.html"));
+  });
+}
 
 export default app;
