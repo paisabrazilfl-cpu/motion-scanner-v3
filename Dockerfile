@@ -15,7 +15,9 @@ RUN pnpm install --frozen-lockfile
 
 RUN pnpm run typecheck:libs
 
-ARG VITE_CLERK_PUBLISHABLE_KEY=""
+# Public Clerk publishable key (safe to embed — it ships in the client bundle).
+# Render passes the same-named env var as a build arg when present, which overrides this default.
+ARG VITE_CLERK_PUBLISHABLE_KEY="pk_test_cmVndWxhci1tb25rZmlzaC04OC5jbGVyay5hY2NvdW50cy5kZXYk"
 ENV BASE_PATH=/ \
     PORT=3000 \
     NODE_ENV=production \
