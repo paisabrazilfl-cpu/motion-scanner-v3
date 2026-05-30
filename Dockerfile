@@ -1,6 +1,6 @@
 FROM node:24-slim AS builder
 
-RUN corepack enable
+RUN npm install -g pnpm@10.26.1
 
 WORKDIR /app
 
@@ -26,8 +26,6 @@ RUN pnpm --filter @workspace/motion-scanner run build
 RUN pnpm --filter @workspace/api-server run build
 
 FROM node:24-slim AS runtime
-
-RUN corepack enable
 
 WORKDIR /app
 
