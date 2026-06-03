@@ -101,7 +101,7 @@ export function AuditLogs() {
       )}
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <SheetContent className="w-[520px]">
+        <SheetContent className="w-full sm:w-[520px] sm:max-w-[520px]">
           <SheetHeader>
             <SheetTitle>Audit Entry</SheetTitle>
           </SheetHeader>

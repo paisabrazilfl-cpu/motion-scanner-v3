@@ -183,7 +183,7 @@ function ConfigSection({ config }: { config: ScanConfig }) {
           </div>
           {stochFilter && (
             <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {([
                   ["%K Period", stochKPeriod, setStochKPeriod],
                   ["Slow %K Period", stochSlowPeriod, setStochSlowPeriod],

@@ -611,6 +611,44 @@ export async function runScan(
   };
 }
 
+/**
+ * Concurrency-limited scan for large universes (e.g. the full US market).
+ * Processes tickers in fixed-size batches so we never fire thousands of Yahoo
+ * Finance requests at once. After each batch, `onBatch` is invoked with the
+ * cumulative records so callers can persist progress.
+ */
+export async function runScanBatched(
+  tickers: string[],
+  cfg: Record<string, unknown>,
+  providerKeys: TenantProviderKeys = {},
+  onBatch?: (processed: number, records: CandRecord[]) => Promise<void> | void,
+  batchSize = 12,
+  delayMs = 120,
+): Promise<CandRecord[]> {
+  const spyReturn = await fetchSpyReturn();
+  const records: CandRecord[] = [];
+
+  for (let i = 0; i < tickers.length; i += batchSize) {
+    const chunk = tickers.slice(i, i + batchSize);
+    const settled = await Promise.allSettled(
+      chunk.map((tk) => scanTicker(tk.toUpperCase(), cfg, spyReturn, providerKeys)),
+    );
+    settled.forEach((r, j) => {
+      records.push(
+        r.status === "fulfilled"
+          ? r.value
+          : { ticker: chunk[j], verdict: "ABORT" as const, score: 0, reason: "SCAN_ERROR" },
+      );
+    });
+    if (onBatch) await onBatch(records.length, records);
+    if (delayMs > 0 && i + batchSize < tickers.length) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  return records;
+}
+
 async function scanTicker(ticker: string, cfg: Record<string, unknown>, spyReturn: number, keys: TenantProviderKeys): Promise<CandRecord> {
   // Fetch all provider data in parallel
   const [tech, polygonData, finnhubData] = await Promise.all([

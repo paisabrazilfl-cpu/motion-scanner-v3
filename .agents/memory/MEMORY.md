@@ -1,0 +1,3 @@
+- [Mobile responsive patterns](mobile-responsive-patterns.md) — motion-scanner shell drawer, sheet widths, and the touch-hover trap (never leave delete/actions hover-only on mobile).
+- ["not an error object" crashes](not-an-error-object-crashes.md) — empty-stack runtime overlay = non-Error window throw (cross-origin/Clerk script or async lib throw); fix with a global capture-phase non-Error guard.
+- [Per-tenant background jobs](per-tenant-background-jobs.md) — enforce one in-flight job/tenant via a partial unique index (not read-then-insert); gate result reads on status==completed (409 otherwise).

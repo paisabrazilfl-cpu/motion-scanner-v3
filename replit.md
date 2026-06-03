@@ -56,7 +56,8 @@ A full-stack, multi-tenant, SOC 2-aligned stock scanning platform with tri-state
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- **Git push / branch convention (ALWAYS):** Every push must go on a branch whose name includes the **date** and a short **what-changed** note (methodical notes as the branch name), e.g. `2026-06-03-expand-majors-universe`. That branch must always be a full merge of the **latest** version of the project (no loss of functionality) before/when it lands. `main` remains the deploy source for Render (auto-deploys on push to `main`), so the date-named branch is merged into `main` to ship to the live user-facing URL.
+- Always work methodically: self-reflect, plan, execute, observe, verify (build/logs/browser), and do a plan-vs-execution review. Report only what was actually observed/tested — never claim unverified success.
 
 ## Gotchas
 
@@ -65,6 +66,15 @@ _Populate as you build — explicit user instructions worth remembering across s
 - `ENCRYPTION_SECRET` must be a 32-byte hex string. Changing it will break decryption of existing stored API keys.
 - SelectItem values cannot be empty strings in Radix UI — use sentinel values like `"none"`.
 - The global proxy routes `/api` to the API server (port 8080) and `/` to the frontend (port 23523).
+
+## Deployment (Render.com)
+
+- Deployed to Render at `https://motion-scanner-v3.onrender.com` (single Docker service; GitHub repo `paisabrazilfl-cpu/motion-scanner-v3`, auto-deploys on push to `main`).
+- **Auth on the Render domain uses an EXTERNAL Clerk DEV instance** (not Replit-managed Clerk, which can't serve `*.onrender.com`). Dev instances are origin-permissive and need no DNS/CNAME.
+- Required Render env vars: `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` (+ `DATABASE_URL`, `ENCRYPTION_SECRET`).
+- `VITE_CLERK_PUBLISHABLE_KEY` is baked into the frontend bundle at **build time** — the `Dockerfile` passes it as a build ARG so it compiles into the bundle.
+- Direct mode only: do **not** set `VITE_CLERK_PROXY_URL`. The Clerk proxy middleware targets `frontend-api.clerk.dev` (production instances only) and does not work for dev instances.
+- See `.agents/memory/clerk-dev-deploy-verification.md` for the full rationale and how to verify the deployed page actually renders (Firecrawl screenshots show a false-blank for Clerk dev instances — verify with a real browser).
 
 ## Pointers
 

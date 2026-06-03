@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import {
   useListOpenaiConversations,
@@ -146,10 +147,50 @@ Mark stale, missing, or unverifiable data as UNKNOWN. Do not guess.`,
   { label: "Recent scan history recap", prompt: "Review my recent scan history. What tickers have been appearing as GO signals repeatedly? What patterns do you see?" },
 ];
 
+// ── Conversation list (shared by desktop sidebar + mobile drawer) ───────────────
+
+function ConversationList({
+  convList,
+  activeConvId,
+  onSelect,
+  onDelete,
+}: {
+  convList: Array<{ id: number; title: string | null }>;
+  activeConvId: number | null;
+  onSelect: (id: number) => void;
+  onDelete: (id: number, e: React.MouseEvent) => void;
+}) {
+  return (
+    <ScrollArea className="flex-1">
+      {convList.length === 0 && (
+        <p className="text-xs text-muted-foreground p-3">No conversations yet</p>
+      )}
+      {[...convList].reverse().map((conv) => (
+        <div
+          key={conv.id}
+          onClick={() => onSelect(conv.id)}
+          className={cn(
+            "flex items-center gap-1 px-2 py-2 cursor-pointer group border-b border-border/30 hover:bg-sidebar-accent/50 transition-colors",
+            activeConvId === conv.id && "bg-sidebar-accent"
+          )}
+        >
+          <ChevronRight className={cn("h-3 w-3 shrink-0 text-muted-foreground", activeConvId === conv.id && "text-primary")} />
+          <span className="text-xs truncate flex-1">{conv.title}</span>
+          <Button size="icon" variant="ghost" className="h-4 w-4 opacity-100 md:opacity-0 md:group-hover:opacity-100 shrink-0"
+            onClick={(e) => onDelete(conv.id, e)}>
+            <Trash2 className="h-3 w-3 text-destructive" />
+          </Button>
+        </div>
+      ))}
+    </ScrollArea>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function Agent() {
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
+  const [convSheetOpen, setConvSheetOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -298,41 +339,49 @@ export function Agent() {
   return (
     <div className="flex h-full overflow-hidden">
       {/* ── Sidebar ─────────────────────────────────────────────────────────── */}
-      <div className="w-56 border-r border-border flex flex-col bg-sidebar shrink-0">
+      <div className="hidden md:flex w-56 border-r border-border flex-col bg-sidebar shrink-0">
         <div className="p-3 border-b border-border flex items-center justify-between">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Agent</span>
           <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startNewConversation()} title="New">
             <Plus className="h-4 w-4" />
           </Button>
         </div>
-        <ScrollArea className="flex-1">
-          {convList.length === 0 && (
-            <p className="text-xs text-muted-foreground p-3">No conversations yet</p>
-          )}
-          {[...convList].reverse().map((conv) => (
-            <div
-              key={conv.id}
-              onClick={() => { setActiveConvId(conv.id); refetchDetail(); }}
-              className={cn(
-                "flex items-center gap-1 px-2 py-2 cursor-pointer group border-b border-border/30 hover:bg-sidebar-accent/50 transition-colors",
-                activeConvId === conv.id && "bg-sidebar-accent"
-              )}
-            >
-              <ChevronRight className={cn("h-3 w-3 shrink-0 text-muted-foreground", activeConvId === conv.id && "text-primary")} />
-              <span className="text-xs truncate flex-1">{conv.title}</span>
-              <Button size="icon" variant="ghost" className="h-4 w-4 opacity-0 group-hover:opacity-100 shrink-0"
-                onClick={(e) => handleDeleteConv(conv.id, e)}>
-                <Trash2 className="h-3 w-3 text-destructive" />
-              </Button>
-            </div>
-          ))}
-        </ScrollArea>
+        <ConversationList
+          convList={convList}
+          activeConvId={activeConvId}
+          onSelect={(id) => { setActiveConvId(id); refetchDetail(); }}
+          onDelete={handleDeleteConv}
+        />
       </div>
+
+      {/* ── Mobile conversation drawer ──────────────────────────────────────── */}
+      <Sheet open={convSheetOpen} onOpenChange={setConvSheetOpen}>
+        <SheetContent side="left" className="w-72 max-w-[80vw] p-0 flex flex-col bg-sidebar gap-0">
+          <SheetHeader className="p-3 border-b border-border">
+            <SheetTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider text-left">Conversations</SheetTitle>
+          </SheetHeader>
+          <div className="p-2 border-b border-border">
+            <Button size="sm" variant="outline" className="w-full text-xs"
+              onClick={() => { startNewConversation(); setConvSheetOpen(false); }}>
+              <Plus className="h-3.5 w-3.5 mr-1" /> New conversation
+            </Button>
+          </div>
+          <ConversationList
+            convList={convList}
+            activeConvId={activeConvId}
+            onSelect={(id) => { setActiveConvId(id); refetchDetail(); setConvSheetOpen(false); }}
+            onDelete={handleDeleteConv}
+          />
+        </SheetContent>
+      </Sheet>
 
       {/* ── Chat area ──────────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="border-b border-border px-6 py-3 flex items-center gap-3 shrink-0">
+        <div className="border-b border-border px-4 sm:px-6 py-3 flex items-center gap-3 shrink-0">
+          <Button size="icon" variant="ghost" className="md:hidden h-7 w-7 shrink-0" onClick={() => setConvSheetOpen(true)} title="Conversations">
+            <List className="h-4 w-4" />
+          </Button>
           <Bot className="h-5 w-5 text-primary" />
           <div>
             <h1 className="font-semibold text-sm">Market Analysis Agent</h1>
@@ -353,7 +402,7 @@ export function Agent() {
         </div>
 
         {/* Messages */}
-        <ScrollArea className="flex-1 px-6 py-4">
+        <ScrollArea className="flex-1 px-4 sm:px-6 py-4">
           {messages.length === 0 && !streaming && (
             <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-6">
               <div className="flex flex-col items-center gap-2 text-center">
@@ -365,7 +414,7 @@ export function Agent() {
                   I can run real scans, check sector rotation, load your watchlists, and analyze price data live — not just answer from training data.
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-2 w-full max-w-xl">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-xl">
                 {SUGGESTIONS.map((s) => (
                   <button
                     key={s.label}
@@ -421,7 +470,7 @@ export function Agent() {
         </ScrollArea>
 
         {/* Input */}
-        <div className="border-t border-border px-6 py-4 shrink-0">
+        <div className="border-t border-border px-4 sm:px-6 py-4 shrink-0">
           <div className="max-w-3xl mx-auto flex gap-2 items-end">
             <Textarea
               value={input}

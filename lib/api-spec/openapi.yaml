@@ -481,7 +481,105 @@ paths:
               schema:
                 $ref: "#/components/schemas/ScreenerResult"
 
-  # ── NOTES ─────────────────────────────────────────────────────────────────
+  # ── FULL-MARKET SCAN JOBS ──────────────────────────────────────────────────
+  /scan-jobs:
+    post:
+      operationId: startFullMarketScan
+      tags: [scan]
+      summary: Start a background scan of the entire US market (~6000 NYSE/NASDAQ stocks)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartFullMarketScanBody"
+      responses:
+        "200":
+          description: The created (or already-running) scan job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScanJob"
+
+  /scan-jobs/latest:
+    get:
+      operationId: getLatestScanJob
+      tags: [scan]
+      summary: Get the most recent full-market scan job for the current tenant
+      responses:
+        "200":
+          description: Latest scan job (or null if none exists)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LatestScanJob"
+
+  /scan-jobs/{id}/results:
+    get:
+      operationId: getScanJobResults
+      tags: [scan]
+      summary: Get filtered results from a completed full-market scan job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: priceMin
+          in: query
+          schema: { type: number, default: 1 }
+        - name: priceMax
+          in: query
+          schema: { type: number, default: 10000 }
+        - name: rsiMin
+          in: query
+          schema: { type: number, default: 0 }
+        - name: rsiMax
+          in: query
+          schema: { type: number, default: 100 }
+        - name: adxMin
+          in: query
+          schema: { type: number, default: 0 }
+        - name: rvolMin
+          in: query
+          schema: { type: number, default: 0 }
+        - name: scoreMin
+          in: query
+          schema: { type: number, default: 0 }
+        - name: verdictFilter
+          in: query
+          schema: { type: string, enum: [all, go, go_hold], default: all }
+        - name: aboveEma10
+          in: query
+          schema: { type: boolean }
+        - name: aboveSma20
+          in: query
+          schema: { type: boolean }
+        - name: emaStackRequired
+          in: query
+          schema: { type: boolean }
+        - name: stochMin
+          in: query
+          schema: { type: number }
+        - name: stochMax
+          in: query
+          schema: { type: number }
+        - name: macd3mAboveZero
+          in: query
+          schema: { type: boolean }
+        - name: macd3mHistPositive
+          in: query
+          schema: { type: boolean }
+        - name: breakoutOnly
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Filtered scan-job results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScreenerResult"
+
   /notes:
     get:
       operationId: getNotes
@@ -762,6 +860,7 @@ components:
           type: array
           items:
             type: string
+          maxItems: 50
         watchlistId:
           type: ["integer", "null"]
         configOverride:
@@ -1146,6 +1245,56 @@ components:
           type: integer
         cachedAt:
           type: string
+
+    # ── FULL-MARKET SCAN JOBS ──────────────────────────────────────────────
+    StartFullMarketScanBody:
+      type: object
+      properties:
+        limit:
+          type: integer
+          description: Optional cap on number of tickers (for testing); omit to scan the whole market.
+
+    ScanJob:
+      type: object
+      required: [id, tenantId, status, universe, total, processed, goCount, holdCount, rejectCount, createdAt]
+      properties:
+        id:
+          type: integer
+        tenantId:
+          type: integer
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        universe:
+          type: string
+        total:
+          type: integer
+        processed:
+          type: integer
+        goCount:
+          type: integer
+        holdCount:
+          type: integer
+        rejectCount:
+          type: integer
+        error:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        startedAt:
+          type: ["string", "null"]
+        completedAt:
+          type: ["string", "null"]
+
+    LatestScanJob:
+      type: object
+      required: [job]
+      properties:
+        job:
+          oneOf:
+            - $ref: "#/components/schemas/ScanJob"
+            - type: "null"
+
     # ── NOTES ─────────────────────────────────────────────────────────────
     Note:
       type: object

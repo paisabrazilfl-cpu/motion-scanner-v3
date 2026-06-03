@@ -35,7 +35,9 @@ import type {
   ExecutionResult,
   GetChartParams,
   GetNewsParams,
+  GetScanJobResultsParams,
   HealthStatus,
+  LatestScanJob,
   ListAuditLogsParams,
   ListScanHistoryParams,
   NewsFeed,
@@ -54,10 +56,12 @@ import type {
   ScanConfigInput,
   ScanHistoryItem,
   ScanHistoryList,
+  ScanJob,
   ScanRequest,
   ScanResult,
   ScreenerResult,
   SectorRotation,
+  StartFullMarketScanBody,
   Watchlist,
   WatchlistInput
 } from './api.schemas';
@@ -1716,6 +1720,243 @@ export function useRunScreener<TData = Awaited<ReturnType<typeof runScreener>>, 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getRunScreenerQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getStartFullMarketScanUrl = () => {
+
+
+
+
+  return `/api/scan-jobs`
+}
+
+/**
+ * @summary Start a background scan of the entire US market (~6000 NYSE/NASDAQ stocks)
+ */
+export const startFullMarketScan = async (startFullMarketScanBody?: StartFullMarketScanBody, options?: RequestInit): Promise<ScanJob> => {
+
+  return customFetch<ScanJob>(getStartFullMarketScanUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      startFullMarketScanBody,)
+  }
+);}
+
+
+
+
+export const getStartFullMarketScanMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startFullMarketScan>>, TError,{data?: BodyType<StartFullMarketScanBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startFullMarketScan>>, TError,{data?: BodyType<StartFullMarketScanBody>}, TContext> => {
+
+const mutationKey = ['startFullMarketScan'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startFullMarketScan>>, {data?: BodyType<StartFullMarketScanBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  startFullMarketScan(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartFullMarketScanMutationResult = NonNullable<Awaited<ReturnType<typeof startFullMarketScan>>>
+    export type StartFullMarketScanMutationBody = BodyType<StartFullMarketScanBody> | undefined
+    export type StartFullMarketScanMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Start a background scan of the entire US market (~6000 NYSE/NASDAQ stocks)
+ */
+export const useStartFullMarketScan = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startFullMarketScan>>, TError,{data?: BodyType<StartFullMarketScanBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startFullMarketScan>>,
+        TError,
+        {data?: BodyType<StartFullMarketScanBody>},
+        TContext
+      > => {
+      return useMutation(getStartFullMarketScanMutationOptions(options));
+    }
+
+export const getGetLatestScanJobUrl = () => {
+
+
+
+
+  return `/api/scan-jobs/latest`
+}
+
+/**
+ * @summary Get the most recent full-market scan job for the current tenant
+ */
+export const getLatestScanJob = async ( options?: RequestInit): Promise<LatestScanJob> => {
+
+  return customFetch<LatestScanJob>(getGetLatestScanJobUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLatestScanJobQueryKey = () => {
+    return [
+    `/api/scan-jobs/latest`
+    ] as const;
+    }
+
+
+export const getGetLatestScanJobQueryOptions = <TData = Awaited<ReturnType<typeof getLatestScanJob>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLatestScanJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLatestScanJobQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLatestScanJob>>> = ({ signal }) => getLatestScanJob({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLatestScanJob>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLatestScanJobQueryResult = NonNullable<Awaited<ReturnType<typeof getLatestScanJob>>>
+export type GetLatestScanJobQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the most recent full-market scan job for the current tenant
+ */
+
+export function useGetLatestScanJob<TData = Awaited<ReturnType<typeof getLatestScanJob>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLatestScanJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLatestScanJobQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetScanJobResultsUrl = (id: number,
+    params?: GetScanJobResultsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/scan-jobs/${id}/results?${stringifiedParams}` : `/api/scan-jobs/${id}/results`
+}
+
+/**
+ * @summary Get filtered results from a completed full-market scan job
+ */
+export const getScanJobResults = async (id: number,
+    params?: GetScanJobResultsParams, options?: RequestInit): Promise<ScreenerResult> => {
+
+  return customFetch<ScreenerResult>(getGetScanJobResultsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetScanJobResultsQueryKey = (id: number,
+    params?: GetScanJobResultsParams,) => {
+    return [
+    `/api/scan-jobs/${id}/results`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetScanJobResultsQueryOptions = <TData = Awaited<ReturnType<typeof getScanJobResults>>, TError = ErrorType<unknown>>(id: number,
+    params?: GetScanJobResultsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScanJobResults>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetScanJobResultsQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getScanJobResults>>> = ({ signal }) => getScanJobResults(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getScanJobResults>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetScanJobResultsQueryResult = NonNullable<Awaited<ReturnType<typeof getScanJobResults>>>
+export type GetScanJobResultsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get filtered results from a completed full-market scan job
+ */
+
+export function useGetScanJobResults<TData = Awaited<ReturnType<typeof getScanJobResults>>, TError = ErrorType<unknown>>(
+ id: number,
+    params?: GetScanJobResultsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScanJobResults>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetScanJobResultsQueryOptions(id,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

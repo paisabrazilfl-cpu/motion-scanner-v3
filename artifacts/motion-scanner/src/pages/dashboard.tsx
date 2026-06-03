@@ -8,17 +8,17 @@ export function Dashboard() {
   const { data: summary, isLoading } = useGetDashboardSummary();
 
   if (isLoading) {
-    return <div className="p-6 space-y-4">
+    return <div className="p-4 sm:p-6 space-y-4">
       <Skeleton className="h-32 w-full" />
       <Skeleton className="h-64 w-full" />
     </div>;
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       <h1 className="text-2xl font-bold font-sans">Dashboard</h1>
       
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-card border-border">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs text-muted-foreground uppercase tracking-wider">Total Scans</CardTitle>
@@ -53,7 +53,7 @@ export function Dashboard() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="text-sm uppercase tracking-wider">Top Tickers</CardTitle>

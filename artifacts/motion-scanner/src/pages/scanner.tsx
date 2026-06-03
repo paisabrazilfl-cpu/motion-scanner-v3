@@ -3,8 +3,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useRunScan, useListWatchlists, useRunScreener,
   useUpdateWatchlist, useCreateWatchlist,
+  useStartFullMarketScan, useGetLatestScanJob, useGetScanJobResults,
 } from "@workspace/api-client-react";
-import type { ScanResult, CandidateRecord, RunScreenerParams, Watchlist } from "@workspace/api-client-react";
+import type {
+  ScanResult, CandidateRecord, RunScreenerParams, Watchlist,
+  ScanJob, GetScanJobResultsParams,
+} from "@workspace/api-client-react";
 import { TickerChart } from "@/components/TickerChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,8 +24,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, Filter, SlidersHorizontal, BarChart2, Bookmark, BookmarkCheck, Plus, Check, Loader2, ListPlus } from "lucide-react";
+import { RefreshCw, Filter, SlidersHorizontal, BarChart2, Bookmark, BookmarkCheck, Plus, Check, Loader2, ListPlus, Globe } from "lucide-react";
 import { formatPercent, formatCurrency } from "@/lib/format";
+
+const MAX_TICKERS = 50;
 
 // ── Shared sub-components ──────────────────────────────────────────────────
 
@@ -451,7 +457,8 @@ function ResultsTable({
   onSelect: (c: CandidateRecord) => void;
 }) {
   return (
-    <Table>
+    <div className="overflow-x-auto">
+    <Table className="min-w-[640px]">
       <TableHeader>
         <TableRow className="border-border">
           <TableHead className="w-8"></TableHead>
@@ -511,6 +518,7 @@ function ResultsTable({
         })}
       </TableBody>
     </Table>
+    </div>
   );
 }
 
@@ -521,6 +529,7 @@ function ManualScan() {
   const [result, setResult] = useState<ScanResult | null>(null);
   const [selected, setSelected] = useState<CandidateRecord | null>(null);
 
+  const { toast } = useToast();
   const { data: watchlists } = useListWatchlists();
   const { mutate: runScan, isPending } = useRunScan({
     mutation: { onSuccess: (data) => setResult(data) },
@@ -533,6 +542,18 @@ function ManualScan() {
     const tickers = wl
       ? wl.tickers
       : tickerInput.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
+    if (tickers.length === 0) {
+      toast({ title: "No tickers", description: "Enter at least one ticker to scan.", variant: "destructive" });
+      return;
+    }
+    if (tickers.length > MAX_TICKERS) {
+      toast({
+        title: "Too many tickers",
+        description: `Max ${MAX_TICKERS} tickers per scan — you have ${tickers.length}. Remove ${tickers.length - MAX_TICKERS}.`,
+        variant: "destructive",
+      });
+      return;
+    }
     runScan({ data: { tickers, computeSectors: false } });
   };
 
@@ -549,9 +570,9 @@ function ManualScan() {
           <CardTitle className="text-sm uppercase tracking-wider">Configure Scan</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground uppercase">Tickers</Label>
+              <Label className="text-xs text-muted-foreground uppercase">Tickers <span className="text-muted-foreground/60 normal-case">(max {MAX_TICKERS})</span></Label>
               <Input
                 value={tickerInput}
                 onChange={(e) => setTickerInput(e.target.value)}
@@ -628,7 +649,7 @@ function ManualScan() {
       )}
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <SheetContent className="w-[520px] sm:max-w-[520px] overflow-y-auto">
+        <SheetContent className="w-full sm:w-[520px] sm:max-w-[520px] overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="text-left">Ticker Detail</SheetTitle>
           </SheetHeader>
@@ -705,9 +726,11 @@ function activeFilterCount(f: ScreenerFilters): number {
 function FilterPanel({
   filters,
   onChange,
+  hideUniverse = false,
 }: {
   filters: ScreenerFilters;
   onChange: (f: ScreenerFilters) => void;
+  hideUniverse?: boolean;
 }) {
   const set = <K extends keyof ScreenerFilters>(k: K, v: ScreenerFilters[K]) =>
     onChange({ ...filters, [k]: v });
@@ -715,41 +738,45 @@ function FilterPanel({
   return (
     <div className="space-y-5 text-sm">
       {/* Universe */}
-      <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground uppercase tracking-wider">Universe</Label>
-        <Select value={filters.universe} onValueChange={(v) => set("universe", v)}>
-          <SelectTrigger className="h-8">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">⚡ All (~300+ tickers)</SelectItem>
-            <div className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mt-1">Broad Indices</div>
-            <SelectItem value="sp100">S&amp;P 100</SelectItem>
-            <SelectItem value="nasdaq100">Nasdaq 100</SelectItem>
-            <SelectItem value="dow30">Dow Jones 30</SelectItem>
-            <div className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mt-1">GICS Sectors</div>
-            <SelectItem value="tech">Technology</SelectItem>
-            <SelectItem value="finance">Financials</SelectItem>
-            <SelectItem value="health">Healthcare</SelectItem>
-            <SelectItem value="energy">Energy</SelectItem>
-            <SelectItem value="consumer">Consumer</SelectItem>
-            <SelectItem value="industrials">Industrials</SelectItem>
-            <SelectItem value="utilities">Utilities</SelectItem>
-            <SelectItem value="materials">Materials</SelectItem>
-            <SelectItem value="realestate">Real Estate / REITs</SelectItem>
-            <SelectItem value="comms">Communication Services</SelectItem>
-            <div className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mt-1">Thematic</div>
-            <SelectItem value="semis">Semiconductors</SelectItem>
-            <SelectItem value="biotech">Biotech</SelectItem>
-            <SelectItem value="smallcap">Small Cap</SelectItem>
-            <SelectItem value="mags7">Magnificent 7</SelectItem>
-            <SelectItem value="aicloud">AI &amp; Cloud</SelectItem>
-            <SelectItem value="dividend">Dividend Leaders</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      {!hideUniverse && (
+        <>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Universe</Label>
+            <Select value={filters.universe} onValueChange={(v) => set("universe", v)}>
+              <SelectTrigger className="h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">⚡ All (~300+ tickers)</SelectItem>
+                <div className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mt-1">Broad Indices</div>
+                <SelectItem value="sp100">S&amp;P 100</SelectItem>
+                <SelectItem value="nasdaq100">Nasdaq 100</SelectItem>
+                <SelectItem value="dow30">Dow Jones 30</SelectItem>
+                <div className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mt-1">GICS Sectors</div>
+                <SelectItem value="tech">Technology</SelectItem>
+                <SelectItem value="finance">Financials</SelectItem>
+                <SelectItem value="health">Healthcare</SelectItem>
+                <SelectItem value="energy">Energy</SelectItem>
+                <SelectItem value="consumer">Consumer</SelectItem>
+                <SelectItem value="industrials">Industrials</SelectItem>
+                <SelectItem value="utilities">Utilities</SelectItem>
+                <SelectItem value="materials">Materials</SelectItem>
+                <SelectItem value="realestate">Real Estate / REITs</SelectItem>
+                <SelectItem value="comms">Communication Services</SelectItem>
+                <div className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mt-1">Thematic</div>
+                <SelectItem value="semis">Semiconductors</SelectItem>
+                <SelectItem value="biotech">Biotech</SelectItem>
+                <SelectItem value="smallcap">Small Cap</SelectItem>
+                <SelectItem value="mags7">Magnificent 7</SelectItem>
+                <SelectItem value="aicloud">AI &amp; Cloud</SelectItem>
+                <SelectItem value="dividend">Dividend Leaders</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-      <Separator />
+          <Separator />
+        </>
+      )}
 
       {/* Verdict */}
       <div className="space-y-1.5">
@@ -943,9 +970,9 @@ function Screener() {
   const results = (data?.results ?? []) as CandidateRecord[];
 
   return (
-    <div className="flex gap-5 h-full">
+    <div className="flex flex-col lg:flex-row gap-5 h-full">
       {/* ── Left filter panel ─────────────────────────────────────────── */}
-      <div className="w-64 flex-shrink-0">
+      <div className="w-full lg:w-64 lg:flex-shrink-0">
         <Card className="bg-card border-border sticky top-4">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2">
@@ -976,7 +1003,7 @@ function Screener() {
       <div className="flex-1 min-w-0 space-y-4">
         {/* Stats bar */}
         {data && !isFetching && (
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-1 text-xs border border-blue-500/40 text-blue-400 rounded px-1.5 py-0.5 font-mono">
               YF
             </span>
@@ -1057,7 +1084,229 @@ function Screener() {
       </div>
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <SheetContent className="w-[520px] sm:max-w-[520px] overflow-y-auto">
+        <SheetContent className="w-full sm:w-[520px] sm:max-w-[520px] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="text-left">Ticker Detail</SheetTitle>
+          </SheetHeader>
+          {selected && <TickerDetail c={selected} />}
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
+// ── Full Market tab ────────────────────────────────────────────────────────
+function FullMarket() {
+  const { toast } = useToast();
+  const [filters, setFilters] = useState<ScreenerFilters>(DEFAULT_FILTERS);
+  const [activeFilters, setActiveFilters] = useState<ScreenerFilters>(DEFAULT_FILTERS);
+  const [selected, setSelected] = useState<CandidateRecord | null>(null);
+
+  // Poll the latest job; refetch quickly while a scan is in flight.
+  const { data: latest } = useGetLatestScanJob({
+    query: {
+      queryKey: ["scan-job-latest"],
+      refetchInterval: (q) => {
+        const s = (q.state.data as { job: ScanJob | null } | undefined)?.job?.status;
+        return s === "pending" || s === "running" ? 3000 : false;
+      },
+      refetchOnWindowFocus: false,
+    },
+  });
+  const job = latest?.job ?? null;
+  const isRunning = job?.status === "pending" || job?.status === "running";
+  const isComplete = job?.status === "completed";
+
+  const startScan = useStartFullMarketScan();
+  const handleStart = () => {
+    startScan.mutate({ data: {} }, {
+      onSuccess: () => toast({ title: "Full-market scan started", description: "Scanning every NYSE/NASDAQ stock — this runs in the background." }),
+      onError: () => toast({ title: "Could not start scan", variant: "destructive" }),
+    });
+  };
+
+  const buildJobParams = useCallback((f: ScreenerFilters): GetScanJobResultsParams => ({
+    priceMin: parseFloat(f.priceMin) || 1,
+    priceMax: parseFloat(f.priceMax) || 10000,
+    rsiMin:   parseFloat(f.rsiMin)   || 0,
+    rsiMax:   parseFloat(f.rsiMax)   || 100,
+    adxMin:   parseFloat(f.adxMin)   || 0,
+    rvolMin:  parseFloat(f.rvolMin)  || 0,
+    scoreMin: parseFloat(f.scoreMin) / 100 || 0,
+    verdictFilter: f.verdictFilter as GetScanJobResultsParams["verdictFilter"],
+    aboveEma10:       f.aboveEma10       || undefined,
+    aboveSma20:       f.aboveSma20       || undefined,
+    emaStackRequired: f.emaStackRequired || undefined,
+    breakoutOnly:     f.breakoutOnly     || undefined,
+    stochMin: f.stochEnabled ? parseFloat(f.stochMin) : undefined,
+    stochMax: f.stochEnabled ? parseFloat(f.stochMax) : undefined,
+    macd3mAboveZero:   f.macd3mAboveZero   || undefined,
+    macd3mHistPositive: f.macd3mHistPositive || undefined,
+  }), []);
+
+  const jobParams = buildJobParams(activeFilters);
+  const jobId = job?.id ?? 0;
+  const { data: resultsData, isFetching } = useGetScanJobResults(jobId, jobParams, {
+    query: {
+      queryKey: ["scan-job-results", jobId, jobParams],
+      enabled: isComplete && jobId > 0,
+      staleTime: 60 * 1000,
+      refetchOnWindowFocus: false,
+    },
+  });
+
+  const handleApply = () => setActiveFilters(filters);
+  const filterCount = activeFilterCount(filters);
+  const results = (resultsData?.results ?? []) as CandidateRecord[];
+  const pct = job && job.total > 0 ? Math.round((job.processed / job.total) * 100) : 0;
+
+  return (
+    <div className="flex flex-col lg:flex-row gap-5 h-full">
+      {/* ── Left filter panel ─────────────────────────────────────────── */}
+      <div className="w-full lg:w-64 lg:flex-shrink-0">
+        <Card className="bg-card border-border sticky top-4">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2">
+              <SlidersHorizontal className="h-4 w-4" />
+              Filters
+              {filterCount > 0 && (
+                <Badge variant="secondary" className="ml-auto text-xs">{filterCount}</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="max-h-[calc(100vh-260px)] overflow-y-auto pr-2 space-y-0">
+            <FilterPanel filters={filters} onChange={setFilters} hideUniverse />
+          </CardContent>
+          <div className="p-4 pt-0">
+            <Button onClick={handleApply} disabled={!isComplete || isFetching}
+              className="w-full font-mono tracking-widest h-9">
+              {isFetching ? "FILTERING..." : "▶  APPLY FILTERS"}
+            </Button>
+          </div>
+        </Card>
+      </div>
+
+      {/* ── Right results panel ────────────────────────────────────────── */}
+      <div className="flex-1 min-w-0 space-y-4">
+        {/* Control / progress bar */}
+        <Card className="bg-card border-border">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-blue-400" />
+                <span className="text-sm font-semibold">Full US Market Scan</span>
+                <span className="text-xs text-muted-foreground">every NYSE / NASDAQ common stock (~6,000)</span>
+              </div>
+              <Button onClick={handleStart} disabled={isRunning || startScan.isPending}
+                size="sm" className="font-mono tracking-wider gap-1.5">
+                {isRunning || startScan.isPending
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> SCANNING</>
+                  : <><RefreshCw className="h-3.5 w-3.5" /> START SCAN</>}
+              </Button>
+            </div>
+
+            {job && (
+              <div className="space-y-1.5">
+                <div className="h-2 w-full rounded bg-muted overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-500 ${job.status === "failed" ? "bg-red-500" : "bg-[hsl(var(--go-color))]"}`}
+                    style={{ width: `${job.status === "completed" ? 100 : pct}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground font-mono">
+                  <span>
+                    {job.status === "completed" && `Done — ${job.processed.toLocaleString()} scanned`}
+                    {isRunning && `Scanning ${job.processed.toLocaleString()} / ${job.total.toLocaleString()} (${pct}%)`}
+                    {job.status === "failed" && `Failed: ${job.error ?? "unknown error"}`}
+                  </span>
+                  <span className="flex gap-2">
+                    <span className="text-[hsl(var(--go-color))]">GO {job.goCount}</span>
+                    <span className="text-yellow-400">HOLD {job.holdCount}</span>
+                    <span className="text-red-400">REJ {job.rejectCount}</span>
+                  </span>
+                </div>
+                {job.completedAt && (
+                  <div className="text-[11px] text-muted-foreground">
+                    last completed {new Date(job.completedAt).toLocaleString()}
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Stats bar */}
+        {isComplete && resultsData && !isFetching && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            <span>
+              <span className="text-foreground font-semibold">{resultsData.total}</span> match{resultsData.total !== 1 ? "es" : ""}
+            </span>
+            <span className="text-border">|</span>
+            <span>{resultsData.scanned} valid stocks in scan</span>
+          </div>
+        )}
+
+        {/* Loading */}
+        {isComplete && isFetching && (
+          <Card className="bg-card border-border">
+            <CardContent className="p-4 space-y-2">
+              {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* No job yet */}
+        {!job && (
+          <Card className="bg-card border-border">
+            <CardContent className="py-16 text-center">
+              <Globe className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+              <div className="text-muted-foreground text-sm">No full-market scan yet.</div>
+              <div className="text-muted-foreground text-xs mt-1">
+                Click <span className="font-semibold text-foreground">Start Scan</span> to scan every US stock. This runs in the background (~20–30 min).
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Running, no prior results */}
+        {isRunning && !resultsData && (
+          <Card className="bg-card border-border">
+            <CardContent className="py-16 text-center">
+              <Loader2 className="h-8 w-8 text-muted-foreground mx-auto mb-3 animate-spin" />
+              <div className="text-muted-foreground text-sm">Scanning the full market…</div>
+              <div className="text-muted-foreground text-xs mt-1">Results will appear here when the scan completes. You can leave this page.</div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Empty results */}
+        {isComplete && !isFetching && resultsData && results.length === 0 && (
+          <Card className="bg-card border-border">
+            <CardContent className="py-16 text-center">
+              <Filter className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+              <div className="text-muted-foreground text-sm">No stocks matched your filters.</div>
+              <div className="text-muted-foreground text-xs mt-1">Loosen the criteria and click Apply Filters.</div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Results */}
+        {isComplete && !isFetching && results.length > 0 && (
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground">
+                Matching stocks — click row to drill down
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ResultsTable rows={results} onSelect={setSelected} />
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+        <SheetContent className="w-full sm:w-[520px] sm:max-w-[520px] overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="text-left">Ticker Detail</SheetTitle>
           </SheetHeader>
@@ -1080,6 +1329,10 @@ export function Scanner() {
             <Filter className="h-3.5 w-3.5" />
             Screener
           </TabsTrigger>
+          <TabsTrigger value="fullmarket" className="gap-2">
+            <Globe className="h-3.5 w-3.5" />
+            Full Market
+          </TabsTrigger>
           <TabsTrigger value="manual" className="gap-2">
             <BarChart2 className="h-3.5 w-3.5" />
             Manual Scan
@@ -1088,6 +1341,10 @@ export function Scanner() {
 
         <TabsContent value="screener">
           <Screener />
+        </TabsContent>
+
+        <TabsContent value="fullmarket">
+          <FullMarket />
         </TabsContent>
 
         <TabsContent value="manual">

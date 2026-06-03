@@ -73,40 +73,45 @@ export function TickerChart({ ticker }: { ticker: string }) {
   // Create chart once
   useEffect(() => {
     if (!containerRef.current) return;
-    const chart = createChart(containerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: "transparent" },
-        textColor: CHART_THEME.textColor,
-        fontFamily: "'JetBrains Mono', 'Fira Mono', monospace",
-        fontSize: 11,
-      },
-      grid: {
-        vertLines: { color: CHART_THEME.gridColor },
-        horzLines: { color: CHART_THEME.gridColor },
-      },
-      crosshair: { mode: 1 },
-      rightPriceScale: { borderColor: CHART_THEME.borderColor },
-      timeScale: {
-        borderColor: CHART_THEME.borderColor,
-        timeVisible: true,
-        secondsVisible: false,
-      },
-      width: containerRef.current.clientWidth,
-      height: 320,
-    });
+    let chart: IChartApi;
+    try {
+      chart = createChart(containerRef.current, {
+        layout: {
+          background: { type: ColorType.Solid, color: "transparent" },
+          textColor: CHART_THEME.textColor,
+          fontFamily: "'JetBrains Mono', 'Fira Mono', monospace",
+          fontSize: 11,
+        },
+        grid: {
+          vertLines: { color: CHART_THEME.gridColor },
+          horzLines: { color: CHART_THEME.gridColor },
+        },
+        crosshair: { mode: 1 },
+        rightPriceScale: { borderColor: CHART_THEME.borderColor },
+        timeScale: {
+          borderColor: CHART_THEME.borderColor,
+          timeVisible: true,
+          secondsVisible: false,
+        },
+        width: containerRef.current.clientWidth || 600,
+        height: 320,
+      });
+    } catch {
+      return;
+    }
     chartRef.current = chart;
 
     const resizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry && chart) {
-        chart.applyOptions({ width: entry.contentRect.width });
+        try { chart.applyOptions({ width: entry.contentRect.width }); } catch {}
       }
     });
     resizeObserver.observe(containerRef.current);
 
     return () => {
       resizeObserver.disconnect();
-      chart.remove();
+      try { chart.remove(); } catch {}
       chartRef.current = null;
     };
   }, []);
@@ -116,6 +121,7 @@ export function TickerChart({ ticker }: { ticker: string }) {
     const chart = chartRef.current;
     if (!chart) return;
 
+    try {
     // Remove existing series
     if (mainSeriesRef.current) { try { chart.removeSeries(mainSeriesRef.current); } catch {} mainSeriesRef.current = null; }
     if (volSeriesRef.current) { try { chart.removeSeries(volSeriesRef.current); } catch {} volSeriesRef.current = null; }
@@ -178,6 +184,11 @@ export function TickerChart({ ticker }: { ticker: string }) {
         setCrosshair({ time: ts, close: ld.value });
       }
     });
+    } catch {
+      // lightweight-charts throws non-Error strings for invariant violations
+      // (disposed series, race conditions). Swallow — the chart recovers on the
+      // next dependency update.
+    }
   }, [chartType]);
 
   // Feed data whenever it or chart type changes
@@ -185,38 +196,42 @@ export function TickerChart({ ticker }: { ticker: string }) {
     if (!data?.candles || !mainSeriesRef.current || !volSeriesRef.current) return;
     const candles = data.candles;
 
-    if (chartType === "candle") {
-      const series = mainSeriesRef.current as ISeriesApi<"Candlestick">;
-      series.setData(candles.map((c) => ({
-        time: c.time as CandlestickData["time"],
-        open: c.open, high: c.high, low: c.low, close: c.close,
+    try {
+      if (chartType === "candle") {
+        const series = mainSeriesRef.current as ISeriesApi<"Candlestick">;
+        series.setData(candles.map((c) => ({
+          time: c.time as CandlestickData["time"],
+          open: c.open, high: c.high, low: c.low, close: c.close,
+        })));
+      } else {
+        const series = mainSeriesRef.current as ISeriesApi<"Line"> | ISeriesApi<"Area">;
+        series.setData(candles.map((c) => ({
+          time: c.time as LineData["time"],
+          value: c.close,
+        })));
+      }
+
+      volSeriesRef.current.setData(candles.map((c) => ({
+        time: c.time as HistogramData["time"],
+        value: c.volume,
+        color: c.close >= c.open ? CHART_THEME.volUp : CHART_THEME.volDown,
       })));
-    } else {
-      const series = mainSeriesRef.current as ISeriesApi<"Line"> | ISeriesApi<"Area">;
-      series.setData(candles.map((c) => ({
-        time: c.time as LineData["time"],
-        value: c.close,
-      })));
-    }
 
-    volSeriesRef.current.setData(candles.map((c) => ({
-      time: c.time as HistogramData["time"],
-      value: c.volume,
-      color: c.close >= c.open ? CHART_THEME.volUp : CHART_THEME.volDown,
-    })));
+      chartRef.current?.timeScale().fitContent();
 
-    chartRef.current?.timeScale().fitContent();
-
-    // Set last bar as initial crosshair state
-    const last = candles[candles.length - 1];
-    if (last) {
-      const chg = last.close - last.open;
-      const pct = last.open > 0 ? (chg / last.open) * 100 : 0;
-      setCrosshair({
-        time: new Date(last.time * 1000).toLocaleDateString(),
-        open: last.open, high: last.high, low: last.low, close: last.close,
-        change: chg, changePct: pct,
-      });
+      // Set last bar as initial crosshair state
+      const last = candles[candles.length - 1];
+      if (last) {
+        const chg = last.close - last.open;
+        const pct = last.open > 0 ? (chg / last.open) * 100 : 0;
+        setCrosshair({
+          time: new Date(last.time * 1000).toLocaleDateString(),
+          open: last.open, high: last.high, low: last.low, close: last.close,
+          change: chg, changePct: pct,
+        });
+      }
+    } catch {
+      // See note above — swallow lightweight-charts non-Error throws.
     }
   }, [data, chartType]);
 

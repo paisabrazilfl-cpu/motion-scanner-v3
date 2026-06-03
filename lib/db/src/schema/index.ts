@@ -2,6 +2,7 @@ export * from "./tenants";
 export * from "./watchlists";
 export * from "./scan-configs";
 export * from "./scan-results";
+export * from "./scan-jobs";
 export * from "./audit-logs";
 export * from "./api-keys";
 export * from "./notes";

@@ -21,7 +21,7 @@ export function Broker() {
     return (
       <div className="p-6 space-y-4">
         <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-28" />)}
         </div>
         <Skeleton className="h-64 w-full" />
@@ -52,7 +52,7 @@ export function Broker() {
       </div>
 
       {account && (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="bg-card border-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-xs text-muted-foreground uppercase tracking-wider">Portfolio Value</CardTitle>

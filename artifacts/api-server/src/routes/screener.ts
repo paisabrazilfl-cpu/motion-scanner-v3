@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { runScan, DEFAULT_CONFIG } from "../lib/scanner";
 import { decrypt } from "../lib/crypto";
 import type { TenantProviderKeys } from "../lib/providers";
+import { parseScreenerQuery, tier1Gate, applyScreenerFilters } from "../lib/screener-filter";
 
 const router = Router();
 
@@ -210,24 +211,6 @@ router.get("/screener", async (req, res): Promise<void> => {
   const universeKey   = (q.universe ?? "sp100") as string;
   const bust          = q.bust === "true";
 
-  const priceMin  = parseFloat(q.priceMin  ?? "1");
-  const priceMax  = parseFloat(q.priceMax  ?? "10000");
-  const rsiMin    = parseFloat(q.rsiMin    ?? "0");
-  const rsiMax    = parseFloat(q.rsiMax    ?? "100");
-  const adxMin    = parseFloat(q.adxMin    ?? "0");
-  const rvolMin   = parseFloat(q.rvolMin   ?? "0");
-  const scoreMin  = parseFloat(q.scoreMin  ?? "0");
-  const stochMin  = q.stochMin  != null ? parseFloat(q.stochMin)  : null;
-  const stochMax  = q.stochMax  != null ? parseFloat(q.stochMax)  : null;
-
-  const verdictFilter    = q.verdictFilter     ?? "all";
-  const aboveEma10       = q.aboveEma10        === "true";
-  const aboveSma20       = q.aboveSma20        === "true";
-  const emaStackRequired = q.emaStackRequired  === "true";
-  const macd3mAboveZero  = q.macd3mAboveZero   === "true";
-  const macd3mHistPos    = q.macd3mHistPositive === "true";
-  const breakoutOnly     = q.breakoutOnly      === "true";
-
   const tickers = UNIVERSES[universeKey] ?? UNIVERSES.sp100;
   const key = `${req.tenantId}:${universeKey}`;
   const cached = cache.get(key);
@@ -250,59 +233,9 @@ router.get("/screener", async (req, res): Promise<void> => {
     allRecords = cached!.records;
   }
 
-  // ── Tier-1 gate: only records with valid Yahoo Finance data ──────────────
-  type AnyRec = {
-    verdict: string;
-    score: number;
-    reason?: string;
-    technical?: Record<string, unknown> | null;
-  };
-
-  const tier1Records = (allRecords as AnyRec[]).filter((c) => {
-    const tech = (c.technical ?? {}) as Record<string, unknown>;
-    // Require Yahoo Finance to have returned a valid OHLCV dataset
-    return tech.ok === true && c.reason !== "SCAN_ERROR";
-  });
-
-  // ── Apply user filters ────────────────────────────────────────────────
-  const filtered = tier1Records.filter((c) => {
-    const tech = (c.technical ?? {}) as Record<string, unknown>;
-    const price      = tech.price      as number | undefined;
-    const rsi        = tech.rsi        as number | undefined;
-    const adx        = tech.adx        as number | undefined;
-    const rvol       = tech.rvol       as number | undefined;
-    const ema10      = tech.ema10      as number | undefined;
-    const sma20      = tech.sma20      as number | undefined;
-    const stochSlowK = tech.stochSlowK as number | undefined;
-    const macd3mLine = tech.macd3m     as number | undefined;
-    const macd3mHist = tech.macd3mHist as number | undefined;
-    const emaStackOk = Boolean(tech.ema_stack_ok);
-    const breakout   = Boolean(tech.breakout);
-
-    if (price  != null && (price  < priceMin || price  > priceMax)) return false;
-    if (rsi    != null && (rsi    < rsiMin   || rsi    > rsiMax  )) return false;
-    if (adx    != null &&  adx    < adxMin                        ) return false;
-    if (rvol   != null &&  rvol   < rvolMin                       ) return false;
-    if (c.score < scoreMin) return false;
-
-    if (verdictFilter === "go"      && c.verdict !== "GO"                         ) return false;
-    if (verdictFilter === "go_hold" && c.verdict !== "GO" && c.verdict !== "HOLD") return false;
-
-    if (aboveEma10       && ema10 != null && price != null && price < ema10) return false;
-    if (aboveSma20       && sma20 != null && price != null && price < sma20) return false;
-    if (emaStackRequired && !emaStackOk) return false;
-    if (breakoutOnly     && !breakout  ) return false;
-
-    if (stochMin != null && stochSlowK != null && stochSlowK < stochMin) return false;
-    if (stochMax != null && stochSlowK != null && stochSlowK > stochMax) return false;
-
-    if (macd3mAboveZero && macd3mLine != null && macd3mLine < 0) return false;
-    if (macd3mHistPos   && macd3mHist != null && macd3mHist < 0) return false;
-
-    return true;
-  });
-
-  filtered.sort((a, b) => b.score - a.score);
+  // ── Tier-1 gate + user filters (shared with full-market scan jobs) ───────
+  const tier1Records = tier1Gate(allRecords as unknown as Parameters<typeof tier1Gate>[0]);
+  const filtered = applyScreenerFilters(tier1Records, parseScreenerQuery(q));
 
   const entry = cache.get(key);
   res.json({

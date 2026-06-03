@@ -11,6 +11,7 @@ import chartRouter from "./chart";
 import newsRouter from "./news";
 import notesRouter from "./notes";
 import screenerRouter from "./screener";
+import scanJobsRouter from "./scan-jobs";
 import openaiRouter from "./openai/index";
 import amfRouter from "./amf";
 
@@ -19,6 +20,7 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(scanRouter);
 router.use(screenerRouter);
+router.use(scanJobsRouter);
 router.use(watchlistsRouter);
 router.use(configRouter);
 router.use(brokerRouter);

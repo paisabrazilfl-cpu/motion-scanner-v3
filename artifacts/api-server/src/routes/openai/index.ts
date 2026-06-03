@@ -57,7 +57,7 @@ TOOLS AVAILABLE:
 AGENT BEHAVIOR:
 - When asked to "find" or "screen" stocks: actually run_scan on relevant tickers, then analyze results
 - Chain tools: list_watchlists → run_scan on those tickers → structured analysis
-- Scan 5–15 tickers at a time; make multiple calls for larger universes
+- Scan 5–15 tickers at a time (hard limit 50 per run_scan call); make multiple calls for larger universes
 - After real data comes back, deliver a quantitative structured analysis
 
 SCAN SIGNAL INTERPRETATION:
@@ -83,7 +83,8 @@ const TOOLS: ChatCompletionTool[] = [
           tickers: {
             type: "array",
             items: { type: "string" },
-            description: "Uppercase ticker symbols, e.g. [\"AAPL\", \"NVDA\", \"TSLA\"]. Max 15 for speed.",
+            maxItems: 50,
+            description: "Uppercase ticker symbols, e.g. [\"AAPL\", \"NVDA\", \"TSLA\"]. Max 50 per scan; 5–15 recommended for speed.",
           },
         },
         required: ["tickers"],
@@ -151,6 +152,7 @@ async function executeTool(
     case "run_scan": {
       const tickers = (args.tickers as string[]) ?? [];
       if (!tickers.length) return { result: { error: "No tickers" }, summary: "No tickers provided" };
+      if (tickers.length > 50) return { result: { error: `Max 50 tickers per scan (got ${tickers.length})` }, summary: `Too many tickers — max 50, got ${tickers.length}` };
       const keys = await getTenantKeys(tenantId);
       const res = await runScan(tickers, DEFAULT_CONFIG, false, keys);
       const summary = `${tickers.length} tickers scanned → ${res.candidates.length} GO, ${res.hold.length} HOLD, ${res.rejected.length} ABORT`;

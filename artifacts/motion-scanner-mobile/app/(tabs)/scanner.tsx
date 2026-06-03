@@ -4,6 +4,7 @@ import * as Haptics from "expo-haptics";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Platform,
   Pressable,
@@ -20,6 +21,8 @@ import {
   useListWatchlists,
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+
+const MAX_TICKERS = 50;
 
 type Verdict = "GO" | "HOLD" | "ABORT";
 
@@ -103,6 +106,18 @@ export default function ScannerScreen() {
     },
   });
 
+  const handleScan = () => {
+    const tickers = tickerInput
+      .split(/[\s,]+/)
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
+    if (tickers.length > MAX_TICKERS) {
+      Alert.alert("Too many tickers", `Max ${MAX_TICKERS} tickers per scan — you have ${tickers.length}.`);
+      return;
+    }
+    scanMutation.mutate();
+  };
+
   const s = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     header: {
@@ -185,7 +200,7 @@ export default function ScannerScreen() {
         <View style={s.inputRow}>
           <TextInput
             style={s.input}
-            placeholder="Tickers: AAPL, TSLA, MSFT..."
+            placeholder="Tickers (max 50): AAPL, TSLA..."
             placeholderTextColor={colors.mutedForeground}
             value={tickerInput}
             onChangeText={setTickerInput}
@@ -194,7 +209,7 @@ export default function ScannerScreen() {
           />
           <TouchableOpacity
             style={[s.scanBtn, scanMutation.isPending && { opacity: 0.6 }]}
-            onPress={() => scanMutation.mutate()}
+            onPress={handleScan}
             disabled={scanMutation.isPending}
             testID="scan-button"
           >

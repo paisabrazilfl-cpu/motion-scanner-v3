@@ -96,11 +96,13 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary Run a scan on a list of tickers
  */
+export const runScanBodyTickersMax = 50;
+
 export const runScanBodyComputeOptionsDefault = true;
 export const runScanBodyComputeSectorsDefault = true;
 
 export const RunScanBody = zod.object({
-  "tickers": zod.array(zod.string()),
+  "tickers": zod.array(zod.string()).max(runScanBodyTickersMax),
   "watchlistId": zod.number().nullish(),
   "configOverride": zod.record(zod.string(), zod.unknown()).nullish(),
   "computeOptions": zod.boolean().default(runScanBodyComputeOptionsDefault),
@@ -458,6 +460,109 @@ export const RunScreenerQueryParams = zod.object({
 })
 
 export const RunScreenerResponse = zod.object({
+  "results": zod.array(zod.object({
+  "ticker": zod.string(),
+  "verdict": zod.enum(['GO', 'HOLD', 'ABORT']),
+  "score": zod.number(),
+  "reason": zod.string().optional(),
+  "technical": zod.record(zod.string(), zod.unknown()).nullish(),
+  "fundamentals": zod.record(zod.string(), zod.unknown()).nullish(),
+  "flow": zod.record(zod.string(), zod.unknown()).nullish(),
+  "monteCarlo": zod.record(zod.string(), zod.unknown()).nullish(),
+  "indicators": zod.record(zod.string(), zod.unknown()).nullish(),
+  "optionsFlow": zod.record(zod.string(), zod.unknown()).nullish(),
+  "options": zod.record(zod.string(), zod.unknown()).nullish(),
+  "sentiment": zod.record(zod.string(), zod.unknown()).nullish(),
+  "sectorContext": zod.record(zod.string(), zod.unknown()).nullish()
+})),
+  "total": zod.number(),
+  "scanned": zod.number(),
+  "cachedAt": zod.string()
+})
+
+
+/**
+ * @summary Start a background scan of the entire US market (~6000 NYSE/NASDAQ stocks)
+ */
+export const StartFullMarketScanBody = zod.object({
+  "limit": zod.number().optional().describe('Optional cap on number of tickers (for testing); omit to scan the whole market.')
+})
+
+export const StartFullMarketScanResponse = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.number(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed']),
+  "universe": zod.string(),
+  "total": zod.number(),
+  "processed": zod.number(),
+  "goCount": zod.number(),
+  "holdCount": zod.number(),
+  "rejectCount": zod.number(),
+  "error": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "startedAt": zod.string().nullish(),
+  "completedAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Get the most recent full-market scan job for the current tenant
+ */
+export const GetLatestScanJobResponse = zod.object({
+  "job": zod.union([zod.object({
+  "id": zod.number(),
+  "tenantId": zod.number(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed']),
+  "universe": zod.string(),
+  "total": zod.number(),
+  "processed": zod.number(),
+  "goCount": zod.number(),
+  "holdCount": zod.number(),
+  "rejectCount": zod.number(),
+  "error": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "startedAt": zod.string().nullish(),
+  "completedAt": zod.string().nullish()
+}),zod.null()])
+})
+
+
+/**
+ * @summary Get filtered results from a completed full-market scan job
+ */
+export const GetScanJobResultsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const getScanJobResultsQueryPriceMinDefault = 1;
+export const getScanJobResultsQueryPriceMaxDefault = 10000;
+export const getScanJobResultsQueryRsiMinDefault = 0;
+export const getScanJobResultsQueryRsiMaxDefault = 100;
+export const getScanJobResultsQueryAdxMinDefault = 0;
+export const getScanJobResultsQueryRvolMinDefault = 0;
+export const getScanJobResultsQueryScoreMinDefault = 0;
+export const getScanJobResultsQueryVerdictFilterDefault = `all`;
+
+export const GetScanJobResultsQueryParams = zod.object({
+  "priceMin": zod.coerce.number().default(getScanJobResultsQueryPriceMinDefault),
+  "priceMax": zod.coerce.number().default(getScanJobResultsQueryPriceMaxDefault),
+  "rsiMin": zod.coerce.number().default(getScanJobResultsQueryRsiMinDefault),
+  "rsiMax": zod.coerce.number().default(getScanJobResultsQueryRsiMaxDefault),
+  "adxMin": zod.coerce.number().default(getScanJobResultsQueryAdxMinDefault),
+  "rvolMin": zod.coerce.number().default(getScanJobResultsQueryRvolMinDefault),
+  "scoreMin": zod.coerce.number().default(getScanJobResultsQueryScoreMinDefault),
+  "verdictFilter": zod.enum(['all', 'go', 'go_hold']).default(getScanJobResultsQueryVerdictFilterDefault),
+  "aboveEma10": zod.coerce.boolean().optional(),
+  "aboveSma20": zod.coerce.boolean().optional(),
+  "emaStackRequired": zod.coerce.boolean().optional(),
+  "stochMin": zod.coerce.number().optional(),
+  "stochMax": zod.coerce.number().optional(),
+  "macd3mAboveZero": zod.coerce.boolean().optional(),
+  "macd3mHistPositive": zod.coerce.boolean().optional(),
+  "breakoutOnly": zod.coerce.boolean().optional()
+})
+
+export const GetScanJobResultsResponse = zod.object({
   "results": zod.array(zod.object({
   "ticker": zod.string(),
   "verdict": zod.enum(['GO', 'HOLD', 'ABORT']),

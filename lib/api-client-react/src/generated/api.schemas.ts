@@ -15,6 +15,7 @@ export interface HealthStatus {
 export type ScanRequestConfigOverride = { [key: string]: unknown } | null;
 
 export interface ScanRequest {
+  /** @maxItems 50 */
   tickers: string[];
   /** @nullable */
   watchlistId?: number | null;
@@ -313,6 +314,44 @@ export interface ScreenerResult {
   cachedAt: string;
 }
 
+export interface StartFullMarketScanBody {
+  /** Optional cap on number of tickers (for testing); omit to scan the whole market. */
+  limit?: number;
+}
+
+export type ScanJobStatus = typeof ScanJobStatus[keyof typeof ScanJobStatus];
+
+
+export const ScanJobStatus = {
+  pending: 'pending',
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export interface ScanJob {
+  id: number;
+  tenantId: number;
+  status: ScanJobStatus;
+  universe: string;
+  total: number;
+  processed: number;
+  goCount: number;
+  holdCount: number;
+  rejectCount: number;
+  /** @nullable */
+  error?: string | null;
+  createdAt: string;
+  /** @nullable */
+  startedAt?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+}
+
+export interface LatestScanJob {
+  job: ScanJob | null;
+}
+
 export interface Note {
   id: number;
   tenantId: number;
@@ -543,6 +582,34 @@ export const RunScreenerUniverse = {
   aicloud: 'aicloud',
   dividend: 'dividend',
   all: 'all',
+} as const;
+
+export type GetScanJobResultsParams = {
+priceMin?: number;
+priceMax?: number;
+rsiMin?: number;
+rsiMax?: number;
+adxMin?: number;
+rvolMin?: number;
+scoreMin?: number;
+verdictFilter?: GetScanJobResultsVerdictFilter;
+aboveEma10?: boolean;
+aboveSma20?: boolean;
+emaStackRequired?: boolean;
+stochMin?: number;
+stochMax?: number;
+macd3mAboveZero?: boolean;
+macd3mHistPositive?: boolean;
+breakoutOnly?: boolean;
+};
+
+export type GetScanJobResultsVerdictFilter = typeof GetScanJobResultsVerdictFilter[keyof typeof GetScanJobResultsVerdictFilter];
+
+
+export const GetScanJobResultsVerdictFilter = {
+  all: 'all',
+  go: 'go',
+  go_hold: 'go_hold',
 } as const;
 
 export type GetNewsParams = {

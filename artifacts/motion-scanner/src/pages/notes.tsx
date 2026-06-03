@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Trash2, StickyNote, Clock } from "lucide-react";
+import { Plus, Trash2, StickyNote, Clock, ChevronLeft } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -116,9 +116,12 @@ export function Notes() {
   );
 
   return (
-    <div className="flex h-[calc(100vh-0px)] overflow-hidden">
+    <div className="flex h-full overflow-hidden">
       {/* ── Sidebar ───────────────────────────────────────────────────── */}
-      <div className="w-64 flex-shrink-0 border-r border-border flex flex-col bg-card/50">
+      <div className={cn(
+        "w-full md:w-64 md:flex-shrink-0 border-r border-border flex-col bg-card/50",
+        activeId ? "hidden md:flex" : "flex"
+      )}>
         {/* Header */}
         <div className="p-3 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -209,11 +212,23 @@ export function Notes() {
       </div>
 
       {/* ── Editor ────────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className={cn(
+        "flex-1 flex-col overflow-hidden",
+        activeId ? "flex" : "hidden md:flex"
+      )}>
         {activeId && activeNote ? (
           <>
             {/* Editor toolbar */}
-            <div className="flex items-center gap-3 px-6 py-3 border-b border-border">
+            <div className="flex items-center gap-3 px-4 sm:px-6 py-3 border-b border-border">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="md:hidden h-7 w-7 shrink-0 -ml-1 text-muted-foreground"
+                onClick={() => setActiveId(null)}
+                title="Back to notes"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
               <Input
                 value={title}
                 onChange={(e) => handleTitleChange(e.target.value)}

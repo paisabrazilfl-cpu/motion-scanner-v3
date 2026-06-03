@@ -69,18 +69,18 @@
   --foreground: 213 31% 91%;
 
   --muted: 223 47% 11%;
-  --muted-foreground: 215.4 16.3% 56.9%;
+  --muted-foreground: 215 16% 66%;
 
   --popover: 224 71% 4%;
   --popover-foreground: 215 20.2% 65.1%;
-  --popover-border: 216 34% 17%;
+  --popover-border: 216 28% 26%;
 
   --card: 224 71% 4%;
   --card-foreground: 213 31% 91%;
-  --card-border: 216 34% 17%;
+  --card-border: 216 28% 26%;
 
-  --border: 216 34% 17%;
-  --input: 216 34% 17%;
+  --border: 216 28% 26%;
+  --input: 216 28% 26%;
 
   --primary: 210 40% 98%;
   --primary-foreground: 222.2 47.4% 11.2%;
@@ -88,22 +88,22 @@
   --secondary: 222.2 47.4% 11.2%;
   --secondary-foreground: 210 40% 98%;
 
-  --accent: 216 34% 17%;
+  --accent: 216 28% 26%;
   --accent-foreground: 210 40% 98%;
 
   --destructive: 0 63% 31%;
   --destructive-foreground: 210 40% 98%;
 
-  --ring: 216 34% 17%;
+  --ring: 216 28% 26%;
 
   --sidebar: 224 71% 4%;
   --sidebar-foreground: 213 31% 91%;
-  --sidebar-border: 216 34% 17%;
+  --sidebar-border: 216 28% 26%;
   --sidebar-primary: 210 40% 98%;
   --sidebar-primary-foreground: 222.2 47.4% 11.2%;
-  --sidebar-accent: 216 34% 17%;
+  --sidebar-accent: 216 28% 26%;
   --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 216 34% 17%;
+  --sidebar-ring: 216 28% 26%;
 
   --app-font-sans: 'Inter', sans-serif;
   --app-font-mono: 'JetBrains Mono', monospace;
@@ -125,18 +125,18 @@
   --foreground: 213 31% 91%;
 
   --muted: 223 47% 11%;
-  --muted-foreground: 215.4 16.3% 56.9%;
+  --muted-foreground: 215 16% 66%;
 
   --popover: 224 71% 4%;
   --popover-foreground: 215 20.2% 65.1%;
-  --popover-border: 216 34% 17%;
+  --popover-border: 216 28% 26%;
 
   --card: 224 71% 4%;
   --card-foreground: 213 31% 91%;
-  --card-border: 216 34% 17%;
+  --card-border: 216 28% 26%;
 
-  --border: 216 34% 17%;
-  --input: 216 34% 17%;
+  --border: 216 28% 26%;
+  --input: 216 28% 26%;
 
   --primary: 210 40% 98%;
   --primary-foreground: 222.2 47.4% 11.2%;
@@ -144,22 +144,22 @@
   --secondary: 222.2 47.4% 11.2%;
   --secondary-foreground: 210 40% 98%;
 
-  --accent: 216 34% 17%;
+  --accent: 216 28% 26%;
   --accent-foreground: 210 40% 98%;
 
   --destructive: 0 63% 31%;
   --destructive-foreground: 210 40% 98%;
 
-  --ring: 216 34% 17%;
+  --ring: 216 28% 26%;
 
   --sidebar: 224 71% 4%;
   --sidebar-foreground: 213 31% 91%;
-  --sidebar-border: 216 34% 17%;
+  --sidebar-border: 216 28% 26%;
   --sidebar-primary: 210 40% 98%;
   --sidebar-primary-foreground: 222.2 47.4% 11.2%;
-  --sidebar-accent: 216 34% 17%;
+  --sidebar-accent: 216 28% 26%;
   --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 216 34% 17%;
+  --sidebar-ring: 216 28% 26%;
 
   --chart-1: 142 71% 45%;
   --chart-2: 38 92% 50%;
