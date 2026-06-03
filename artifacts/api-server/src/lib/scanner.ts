@@ -284,8 +284,11 @@ function isBreakout52w(closes: number[]): boolean {
 }
 
 // ── Technical data ────────────────────────────────────────────────────────────
-export async function getTechnical(ticker: string): Promise<TechData> {
-  const chart = await fetchYahooChart(ticker, "1y");
+export async function getTechnical(
+  ticker: string,
+  prefetchedChart?: Awaited<ReturnType<typeof fetchYahooChart>>,
+): Promise<TechData> {
+  const chart = prefetchedChart !== undefined ? prefetchedChart : await fetchYahooChart(ticker, "1y");
   if (!chart || chart.closes.length < 20) return { ok: false } as unknown as TechData;
   try {
     const { closes, highs, lows, opens, volumes } = chart;
@@ -650,9 +653,13 @@ export async function runScanBatched(
 }
 
 async function scanTicker(ticker: string, cfg: Record<string, unknown>, spyReturn: number, keys: TenantProviderKeys): Promise<CandRecord> {
+  // Fetch the Yahoo chart once and reuse it for both technical and flow analysis
+  // (avoids a second identical chart request per ticker — critical at full-market scale).
+  const chart = await fetchYahooChart(ticker, "1y").catch(() => null);
+
   // Fetch all provider data in parallel
   const [tech, polygonData, finnhubData] = await Promise.all([
-    getTechnical(ticker),
+    getTechnical(ticker, chart),
     keys.polygonKey ? fetchPolygonData(ticker, keys.polygonKey) : Promise.resolve(null),
     keys.finnhubKey ? fetchFinnhubData(ticker, keys.finnhubKey) : Promise.resolve(null),
   ]);
@@ -668,8 +675,7 @@ async function scanTicker(ticker: string, cfg: Record<string, unknown>, spyRetur
     else if (finnhubData?.quote?.changePct != null) tech.changePct = finnhubData.quote.changePct;
   }
 
-  // Build flow data from Yahoo chart (already fetched inside getTechnical)
-  const chart = await fetchYahooChart(ticker, "1y").catch(() => null);
+  // Build flow data from the chart fetched above (reused — no extra Yahoo request).
   const flow = await getFlow(ticker, spyReturn, chart ?? undefined);
 
   // Fundamentals: merge Yahoo + Finnhub
